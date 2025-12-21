@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package turboci.v1;
+
+option go_package = "github.com/example/turboci-lite/gen/proto/turboci/v1;turbocipb";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "turboci/v1/common.proto";
+
+// Check is a non-executable node representing an objective/question.
+message Check {
+  // Unique ID within the WorkPlan
+  string id = 1;
+
+  // WorkPlan this Check belongs to
+  string work_plan_id = 2;
+
+  // Current state
+  CheckState state = 3;
+
+  // Coarse-grained kind (e.g., "build", "test")
+  string kind = 4;
+
+  // Options describing how to answer the check (JSON-compatible)
+  google.protobuf.Struct options = 5;
+
+  // Results from stage attempts
+  repeated CheckResult results = 6;
+
+  // Dependencies on other checks
+  DependencyGroup dependencies = 7;
+
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  int64 version = 10;
+}
+
+// CheckResult contains results from a stage attempt for a check.
+message CheckResult {
+  int64 id = 1;
+
+  // Owner is typically a stage attempt identifier
+  string owner_type = 2;  // e.g., "stage_attempt"
+  string owner_id = 3;    // e.g., "stage_id:attempt_idx"
+
+  // Result data (JSON-compatible)
+  google.protobuf.Struct data = 4;
+
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp finalized_at = 6;
+
+  // Set if the owner failed
+  Failure failure = 7;
+}
+
+// CheckWrite is used in WriteNodes to create or update a Check.
+message CheckWrite {
+  // ID of the check (required)
+  string id = 1;
+
+  // State to set (for new checks, defaults to PLANNING)
+  CheckState state = 2;
+
+  // Kind of check
+  string kind = 3;
+
+  // Options to set
+  google.protobuf.Struct options = 4;
+
+  // Dependencies to add
+  DependencyGroup dependencies = 5;
+
+  // Result to add (for existing checks)
+  CheckResultWrite result = 6;
+}
+
+// CheckResultWrite is used to add a result to a Check.
+message CheckResultWrite {
+  string owner_type = 1;
+  string owner_id = 2;
+  google.protobuf.Struct data = 3;
+  bool finalize = 4;
+  Failure failure = 5;
+}

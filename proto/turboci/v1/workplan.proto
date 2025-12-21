@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package turboci.v1;
+
+option go_package = "github.com/example/turboci-lite/gen/proto/turboci/v1;turbocipb";
+
+import "google/protobuf/timestamp.proto";
+
+// WorkPlan is a container for an entire workflow execution.
+message WorkPlan {
+  string id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp updated_at = 3;
+  int64 version = 4;
+}
+
+// CreateWorkPlanRequest creates a new empty WorkPlan.
+message CreateWorkPlanRequest {
+  // Optional metadata for the workplan
+  map<string, string> metadata = 1;
+}
+
+// CreateWorkPlanResponse returns the created WorkPlan.
+message CreateWorkPlanResponse {
+  WorkPlan work_plan = 1;
+}
+
+// GetWorkPlanRequest retrieves a WorkPlan by ID.
+message GetWorkPlanRequest {
+  string id = 1;
+}
+
+// GetWorkPlanResponse returns the requested WorkPlan.
+message GetWorkPlanResponse {
+  WorkPlan work_plan = 1;
+}

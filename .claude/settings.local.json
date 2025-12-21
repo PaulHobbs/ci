@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Skill(turboci-lite)",
+      "Bash(ls -la /Users/phobbs/Downloads/luci-go-refs_heads_main/turboci-lite/*.mod)"
+    ]
+  }
+}

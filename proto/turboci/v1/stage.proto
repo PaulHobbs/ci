@@ -1,0 +1,113 @@
+syntax = "proto3";
+
+package turboci.v1;
+
+option go_package = "github.com/example/turboci-lite/gen/proto/turboci/v1;turbocipb";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "turboci/v1/common.proto";
+
+// Stage is an executable node in the workflow.
+message Stage {
+  // Unique ID within the WorkPlan
+  string id = 1;
+
+  // WorkPlan this Stage belongs to
+  string work_plan_id = 2;
+
+  // Current state
+  StageState state = 3;
+
+  // Arguments for the stage executor (JSON-compatible)
+  google.protobuf.Struct args = 4;
+
+  // Execution attempts
+  repeated Attempt attempts = 5;
+
+  // Check assignments (responsibilities)
+  repeated Assignment assignments = 6;
+
+  // Dependencies on other checks/stages
+  DependencyGroup dependencies = 7;
+
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  int64 version = 10;
+}
+
+// Attempt represents a single execution attempt of a Stage.
+message Attempt {
+  // 1-based index within the stage
+  int32 idx = 1;
+
+  // Current state
+  AttemptState state = 2;
+
+  // Unique process identifier claiming this attempt
+  string process_uid = 3;
+
+  // Executor-provided details (JSON-compatible)
+  google.protobuf.Struct details = 4;
+
+  // Progress messages
+  repeated ProgressEntry progress = 5;
+
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+
+  // Set if the attempt failed
+  Failure failure = 8;
+}
+
+// ProgressEntry is a progress message from an attempt.
+message ProgressEntry {
+  string message = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  google.protobuf.Struct details = 3;
+}
+
+// Assignment indicates a stage's responsibility to handle a check.
+message Assignment {
+  string target_check_id = 1;
+  CheckState goal_state = 2;
+}
+
+// StageWrite is used in WriteNodes to create or update a Stage.
+message StageWrite {
+  // ID of the stage (required)
+  string id = 1;
+
+  // State to set (for new stages, defaults to PLANNED)
+  StageState state = 2;
+
+  // Arguments for the executor
+  google.protobuf.Struct args = 3;
+
+  // Check assignments
+  repeated Assignment assignments = 4;
+
+  // Dependencies
+  DependencyGroup dependencies = 5;
+
+  // Current attempt update (for updating attempt state/progress)
+  AttemptWrite current_attempt = 6;
+}
+
+// AttemptWrite is used to update the current attempt.
+message AttemptWrite {
+  // State transition
+  AttemptState state = 1;
+
+  // Process UID claiming this attempt (required when moving to RUNNING)
+  string process_uid = 2;
+
+  // Details to add
+  google.protobuf.Struct details = 3;
+
+  // Progress message to append
+  ProgressEntry progress = 4;
+
+  // Failure information
+  Failure failure = 5;
+}

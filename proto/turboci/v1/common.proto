@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package turboci.v1;
+
+option go_package = "github.com/example/turboci-lite/gen/proto/turboci/v1;turbocipb";
+
+import "google/protobuf/timestamp.proto";
+
+// CheckState describes the current state of a Check.
+enum CheckState {
+  CHECK_STATE_UNKNOWN = 0;
+  CHECK_STATE_PLANNING = 10;   // Check is being defined
+  CHECK_STATE_PLANNED = 20;    // Check complete but deps unresolved
+  CHECK_STATE_WAITING = 30;    // Deps resolved, waiting for results
+  CHECK_STATE_FINAL = 40;      // Fully complete and immutable
+}
+
+// StageState describes the current state of a Stage.
+enum StageState {
+  STAGE_STATE_UNKNOWN = 0;
+  STAGE_STATE_PLANNED = 10;        // Stage inserted but deps unresolved
+  STAGE_STATE_ATTEMPTING = 20;     // Deps resolved, executing
+  STAGE_STATE_AWAITING_GROUP = 30; // Execution done, waiting for children
+  STAGE_STATE_FINAL = 40;          // Fully complete
+}
+
+// AttemptState describes the state of a Stage Attempt.
+enum AttemptState {
+  ATTEMPT_STATE_UNKNOWN = 0;
+  ATTEMPT_STATE_PENDING = 10;    // Created, not yet scheduled
+  ATTEMPT_STATE_SCHEDULED = 20;  // Scheduled for execution
+  ATTEMPT_STATE_RUNNING = 30;    // Currently executing
+  ATTEMPT_STATE_COMPLETE = 40;   // Finished successfully
+  ATTEMPT_STATE_INCOMPLETE = 50; // Failed or timed out
+}
+
+// PredicateType for dependency logic.
+enum PredicateType {
+  PREDICATE_TYPE_UNKNOWN = 0;
+  PREDICATE_TYPE_AND = 1;  // All dependencies must be satisfied
+  PREDICATE_TYPE_OR = 2;   // Any dependency can satisfy
+}
+
+// NodeType identifies the type of a graph node.
+enum NodeType {
+  NODE_TYPE_UNKNOWN = 0;
+  NODE_TYPE_CHECK = 1;
+  NODE_TYPE_STAGE = 2;
+}
+
+// Dependency represents an edge from one node to another.
+message Dependency {
+  NodeType target_type = 1;
+  string target_id = 2;
+}
+
+// DependencyGroup represents a group of dependencies with a predicate.
+message DependencyGroup {
+  PredicateType predicate = 1;
+  repeated Dependency dependencies = 2;
+}
+
+// Failure contains information about a failure.
+message Failure {
+  string message = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+}

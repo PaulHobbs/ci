@@ -1,0 +1,9 @@
+# Binary
+culprit-finder
+
+# Session data
+.culprit-finder/
+
+# Build artifacts
+*.db
+*.log

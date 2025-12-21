@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package turboci.v1;
+
+option go_package = "github.com/example/turboci-lite/gen/proto/turboci/v1;turbocipb";
+
+import "turboci/v1/workplan.proto";
+import "turboci/v1/check.proto";
+import "turboci/v1/stage.proto";
+import "turboci/v1/common.proto";
+
+// TurboCIOrchestrator is the main API for interacting with the workflow engine.
+service TurboCIOrchestrator {
+  // CreateWorkPlan creates a new empty WorkPlan.
+  rpc CreateWorkPlan(CreateWorkPlanRequest) returns (CreateWorkPlanResponse);
+
+  // GetWorkPlan retrieves a WorkPlan by ID.
+  rpc GetWorkPlan(GetWorkPlanRequest) returns (GetWorkPlanResponse);
+
+  // WriteNodes atomically writes or updates multiple nodes within a WorkPlan.
+  rpc WriteNodes(WriteNodesRequest) returns (WriteNodesResponse);
+
+  // QueryNodes queries nodes in the workflow graph.
+  rpc QueryNodes(QueryNodesRequest) returns (QueryNodesResponse);
+}
+
+// WriteNodesRequest atomically writes multiple checks and stages.
+message WriteNodesRequest {
+  // WorkPlan to write to
+  string work_plan_id = 1;
+
+  // Checks to create or update
+  repeated CheckWrite checks = 2;
+
+  // Stages to create or update
+  repeated StageWrite stages = 3;
+}
+
+// WriteNodesResponse returns the written nodes.
+message WriteNodesResponse {
+  // Written checks
+  repeated Check checks = 1;
+
+  // Written stages
+  repeated Stage stages = 2;
+}
+
+// QueryNodesRequest queries nodes in a WorkPlan.
+message QueryNodesRequest {
+  // WorkPlan to query
+  string work_plan_id = 1;
+
+  // Filter by check IDs (empty = all)
+  repeated string check_ids = 2;
+
+  // Filter by stage IDs (empty = all)
+  repeated string stage_ids = 3;
+
+  // Filter by check states
+  repeated CheckState check_states = 4;
+
+  // Filter by stage states
+  repeated StageState stage_states = 5;
+
+  // Include checks in response
+  bool include_checks = 6;
+
+  // Include stages in response
+  bool include_stages = 7;
+}
+
+// QueryNodesResponse returns queried nodes.
+message QueryNodesResponse {
+  // Matching checks
+  repeated Check checks = 1;
+
+  // Matching stages
+  repeated Stage stages = 2;
+}
