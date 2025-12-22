@@ -186,12 +186,14 @@ func checkResultToProto(r *domain.CheckResult) *pb.CheckResult {
 
 func stageToProto(s *domain.Stage) *pb.Stage {
 	stage := &pb.Stage{
-		Id:         s.ID,
-		WorkPlanId: s.WorkPlanID,
-		State:      pb.StageState(s.State),
-		CreatedAt:  timestamppb.New(s.CreatedAt),
-		UpdatedAt:  timestamppb.New(s.UpdatedAt),
-		Version:    s.Version,
+		Id:            s.ID,
+		WorkPlanId:    s.WorkPlanID,
+		State:         pb.StageState(s.State),
+		ExecutionMode: pb.ExecutionMode(s.ExecutionMode),
+		RunnerType:    s.RunnerType,
+		CreatedAt:     timestamppb.New(s.CreatedAt),
+		UpdatedAt:     timestamppb.New(s.UpdatedAt),
+		Version:       s.Version,
 	}
 
 	if s.Args != nil {
@@ -344,12 +346,18 @@ func checkWriteFromProto(cw *pb.CheckWrite) *service.CheckWrite {
 
 func stageWriteFromProto(sw *pb.StageWrite) *service.StageWrite {
 	write := &service.StageWrite{
-		ID: sw.GetId(),
+		ID:         sw.GetId(),
+		RunnerType: sw.GetRunnerType(),
 	}
 
 	if sw.State != pb.StageState_STAGE_STATE_UNKNOWN {
 		state := domain.StageState(sw.State)
 		write.State = &state
+	}
+
+	if sw.ExecutionMode != pb.ExecutionMode_EXECUTION_MODE_UNKNOWN {
+		mode := domain.ExecutionMode(sw.ExecutionMode)
+		write.ExecutionMode = &mode
 	}
 
 	if sw.Args != nil {
@@ -453,5 +461,143 @@ func nodeTypeFromProto(n pb.NodeType) domain.NodeType {
 		return domain.NodeTypeStage
 	default:
 		return domain.NodeTypeCheck
+	}
+}
+
+// RegisterStageRunner implements the RegisterStageRunner RPC.
+func (s *Server) RegisterStageRunner(ctx context.Context, req *pb.RegisterStageRunnerRequest) (*pb.RegisterStageRunnerResponse, error) {
+	supportedModes := make([]domain.ExecutionMode, 0, len(req.GetSupportedModes()))
+	for _, m := range req.GetSupportedModes() {
+		supportedModes = append(supportedModes, domain.ExecutionMode(m))
+	}
+
+	svcReq := &service.RegisterRunnerRequest{
+		RunnerID:       req.GetRunnerId(),
+		RunnerType:     req.GetRunnerType(),
+		Address:        req.GetAddress(),
+		SupportedModes: supportedModes,
+		MaxConcurrent:  int(req.GetMaxConcurrent()),
+		TTLSeconds:     req.GetTtlSeconds(),
+		Metadata:       req.GetMetadata(),
+	}
+
+	resp, err := s.runnerService.RegisterRunner(ctx, svcReq)
+	if err != nil {
+		return nil, endpoint.MapErrorToStatus(err)
+	}
+
+	return &pb.RegisterStageRunnerResponse{
+		RegistrationId: resp.RegistrationID,
+		ExpiresAt:      timestamppb.New(resp.ExpiresAt),
+	}, nil
+}
+
+// UnregisterStageRunner implements the UnregisterStageRunner RPC.
+func (s *Server) UnregisterStageRunner(ctx context.Context, req *pb.UnregisterStageRunnerRequest) (*pb.UnregisterStageRunnerResponse, error) {
+	err := s.runnerService.UnregisterRunner(ctx, req.GetRegistrationId())
+	if err != nil {
+		return nil, endpoint.MapErrorToStatus(err)
+	}
+
+	return &pb.UnregisterStageRunnerResponse{}, nil
+}
+
+// ListStageRunners implements the ListStageRunners RPC.
+func (s *Server) ListStageRunners(ctx context.Context, req *pb.ListStageRunnersRequest) (*pb.ListStageRunnersResponse, error) {
+	svcReq := &service.ListRunnersRequest{
+		RunnerType: req.GetRunnerType(),
+	}
+
+	runners, err := s.runnerService.ListRunners(ctx, svcReq)
+	if err != nil {
+		return nil, endpoint.MapErrorToStatus(err)
+	}
+
+	pbRunners := make([]*pb.StageRunnerInfo, 0, len(runners))
+	for _, r := range runners {
+		pbRunners = append(pbRunners, stageRunnerToProto(r))
+	}
+
+	return &pb.ListStageRunnersResponse{
+		Runners: pbRunners,
+	}, nil
+}
+
+// UpdateStageExecution implements the UpdateStageExecution RPC.
+func (s *Server) UpdateStageExecution(ctx context.Context, req *pb.UpdateStageExecutionRequest) (*pb.UpdateStageExecutionResponse, error) {
+	svcReq := &service.UpdateExecutionRequest{
+		ExecutionID:     req.GetExecutionId(),
+		ProgressPercent: int(req.GetProgressPercent()),
+		ProgressMessage: req.GetMessage(),
+	}
+
+	err := s.callbackService.UpdateExecution(ctx, svcReq)
+	if err != nil {
+		return nil, endpoint.MapErrorToStatus(err)
+	}
+
+	return &pb.UpdateStageExecutionResponse{}, nil
+}
+
+// CompleteStageExecution implements the CompleteStageExecution RPC.
+func (s *Server) CompleteStageExecution(ctx context.Context, req *pb.CompleteStageExecutionRequest) (*pb.CompleteStageExecutionResponse, error) {
+	checkUpdates := make([]*service.CheckUpdate, 0, len(req.GetCheckUpdates()))
+	for _, cu := range req.GetCheckUpdates() {
+		update := &service.CheckUpdate{
+			CheckID:  cu.GetCheckId(),
+			State:    domain.CheckState(cu.GetState()),
+			Finalize: cu.GetFinalize(),
+		}
+		if cu.GetResultData() != nil {
+			update.Data = cu.GetResultData().AsMap()
+		}
+		checkUpdates = append(checkUpdates, update)
+	}
+
+	// Determine success based on stage state (no explicit success field in proto)
+	success := req.GetStageState() == pb.StageState_STAGE_STATE_FINAL ||
+		req.GetStageState() == pb.StageState_STAGE_STATE_AWAITING_GROUP
+	errorMessage := ""
+	if req.GetFailure() != nil {
+		success = false
+		errorMessage = req.GetFailure().GetMessage()
+	}
+
+	svcReq := &service.CompleteExecutionRequest{
+		ExecutionID:  req.GetExecutionId(),
+		Success:      success,
+		ErrorMessage: errorMessage,
+		CheckUpdates: checkUpdates,
+	}
+
+	err := s.callbackService.CompleteExecution(ctx, svcReq)
+	if err != nil {
+		return nil, endpoint.MapErrorToStatus(err)
+	}
+
+	return &pb.CompleteStageExecutionResponse{
+		Acknowledged: true,
+	}, nil
+}
+
+// stageRunnerToProto converts a domain StageRunner to proto.
+func stageRunnerToProto(r *domain.StageRunner) *pb.StageRunnerInfo {
+	supportedModes := make([]pb.ExecutionMode, 0, len(r.SupportedModes))
+	for _, m := range r.SupportedModes {
+		supportedModes = append(supportedModes, pb.ExecutionMode(m))
+	}
+
+	return &pb.StageRunnerInfo{
+		RunnerId:       r.ID,
+		RegistrationId: r.RegistrationID,
+		RunnerType:     r.RunnerType,
+		Address:        r.Address,
+		SupportedModes: supportedModes,
+		MaxConcurrent:  int32(r.MaxConcurrent),
+		CurrentLoad:    int32(r.CurrentLoad),
+		Metadata:       r.Metadata,
+		RegisteredAt:   timestamppb.New(r.RegisteredAt),
+		LastHeartbeat:  timestamppb.New(r.LastHeartbeat),
+		ExpiresAt:      timestamppb.New(r.ExpiresAt),
 	}
 }

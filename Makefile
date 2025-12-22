@@ -16,6 +16,12 @@ build:
 # Run tests
 test:
 	go test -v ./...
+	@for dir in cmd/*/; do \
+		if [ -f "$$dir/go.mod" ]; then \
+			echo "Testing $$dir..."; \
+			(cd "$$dir" && go test -v ./...); \
+		fi \
+	done
 
 # Clean build artifacts
 clean:

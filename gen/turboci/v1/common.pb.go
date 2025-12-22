@@ -293,6 +293,56 @@ func (NodeType) EnumDescriptor() ([]byte, []int) {
 	return file_turboci_v1_common_proto_rawDescGZIP(), []int{4}
 }
 
+// ExecutionMode specifies how a stage should be executed.
+type ExecutionMode int32
+
+const (
+	ExecutionMode_EXECUTION_MODE_UNKNOWN ExecutionMode = 0
+	ExecutionMode_EXECUTION_MODE_SYNC    ExecutionMode = 1 // Block until completion
+	ExecutionMode_EXECUTION_MODE_ASYNC   ExecutionMode = 2 // Return immediately, callback on completion
+)
+
+// Enum value maps for ExecutionMode.
+var (
+	ExecutionMode_name = map[int32]string{
+		0: "EXECUTION_MODE_UNKNOWN",
+		1: "EXECUTION_MODE_SYNC",
+		2: "EXECUTION_MODE_ASYNC",
+	}
+	ExecutionMode_value = map[string]int32{
+		"EXECUTION_MODE_UNKNOWN": 0,
+		"EXECUTION_MODE_SYNC":    1,
+		"EXECUTION_MODE_ASYNC":   2,
+	}
+)
+
+func (x ExecutionMode) Enum() *ExecutionMode {
+	p := new(ExecutionMode)
+	*p = x
+	return p
+}
+
+func (x ExecutionMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ExecutionMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_turboci_v1_common_proto_enumTypes[5].Descriptor()
+}
+
+func (ExecutionMode) Type() protoreflect.EnumType {
+	return &file_turboci_v1_common_proto_enumTypes[5]
+}
+
+func (x ExecutionMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ExecutionMode.Descriptor instead.
+func (ExecutionMode) EnumDescriptor() ([]byte, []int) {
+	return file_turboci_v1_common_proto_rawDescGZIP(), []int{5}
+}
+
 // Dependency represents an edge from one node to another.
 type Dependency struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -501,7 +551,11 @@ const file_turboci_v1_common_proto_rawDesc = "" +
 	"\bNodeType\x12\x15\n" +
 	"\x11NODE_TYPE_UNKNOWN\x10\x00\x12\x13\n" +
 	"\x0fNODE_TYPE_CHECK\x10\x01\x12\x13\n" +
-	"\x0fNODE_TYPE_STAGE\x10\x02B@Z>github.com/example/turboci-lite/gen/proto/turboci/v1;turbocipbb\x06proto3"
+	"\x0fNODE_TYPE_STAGE\x10\x02*^\n" +
+	"\rExecutionMode\x12\x1a\n" +
+	"\x16EXECUTION_MODE_UNKNOWN\x10\x00\x12\x17\n" +
+	"\x13EXECUTION_MODE_SYNC\x10\x01\x12\x18\n" +
+	"\x14EXECUTION_MODE_ASYNC\x10\x02B:Z8github.com/example/turboci-lite/gen/turboci/v1;turbocipbb\x06proto3"
 
 var (
 	file_turboci_v1_common_proto_rawDescOnce sync.Once
@@ -515,7 +569,7 @@ func file_turboci_v1_common_proto_rawDescGZIP() []byte {
 	return file_turboci_v1_common_proto_rawDescData
 }
 
-var file_turboci_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_turboci_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
 var file_turboci_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_turboci_v1_common_proto_goTypes = []any{
 	(CheckState)(0),               // 0: turboci.v1.CheckState
@@ -523,16 +577,17 @@ var file_turboci_v1_common_proto_goTypes = []any{
 	(AttemptState)(0),             // 2: turboci.v1.AttemptState
 	(PredicateType)(0),            // 3: turboci.v1.PredicateType
 	(NodeType)(0),                 // 4: turboci.v1.NodeType
-	(*Dependency)(nil),            // 5: turboci.v1.Dependency
-	(*DependencyGroup)(nil),       // 6: turboci.v1.DependencyGroup
-	(*Failure)(nil),               // 7: turboci.v1.Failure
-	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
+	(ExecutionMode)(0),            // 5: turboci.v1.ExecutionMode
+	(*Dependency)(nil),            // 6: turboci.v1.Dependency
+	(*DependencyGroup)(nil),       // 7: turboci.v1.DependencyGroup
+	(*Failure)(nil),               // 8: turboci.v1.Failure
+	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
 }
 var file_turboci_v1_common_proto_depIdxs = []int32{
 	4, // 0: turboci.v1.Dependency.target_type:type_name -> turboci.v1.NodeType
 	3, // 1: turboci.v1.DependencyGroup.predicate:type_name -> turboci.v1.PredicateType
-	5, // 2: turboci.v1.DependencyGroup.dependencies:type_name -> turboci.v1.Dependency
-	8, // 3: turboci.v1.Failure.occurred_at:type_name -> google.protobuf.Timestamp
+	6, // 2: turboci.v1.DependencyGroup.dependencies:type_name -> turboci.v1.Dependency
+	9, // 3: turboci.v1.Failure.occurred_at:type_name -> google.protobuf.Timestamp
 	4, // [4:4] is the sub-list for method output_type
 	4, // [4:4] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name
@@ -550,7 +605,7 @@ func file_turboci_v1_common_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_turboci_v1_common_proto_rawDesc), len(file_turboci_v1_common_proto_rawDesc)),
-			NumEnums:      5,
+			NumEnums:      6,
 			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,

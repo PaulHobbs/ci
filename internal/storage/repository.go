@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"time"
 
 	"github.com/example/turboci-lite/internal/domain"
 )
@@ -104,6 +105,78 @@ type DependencyRepository interface {
 	GetUnresolvedByTarget(ctx context.Context, workPlanID string, targetType domain.NodeType, targetID string) ([]*domain.Dependency, error)
 }
 
+// StageRunnerRepository provides access to runner registrations.
+type StageRunnerRepository interface {
+	// Register creates or updates a runner registration.
+	Register(ctx context.Context, runner *domain.StageRunner) error
+
+	// Get retrieves a runner by registration ID.
+	Get(ctx context.Context, registrationID string) (*domain.StageRunner, error)
+
+	// GetByType returns all runners for a given type.
+	GetByType(ctx context.Context, runnerType string) ([]*domain.StageRunner, error)
+
+	// GetAvailable returns available runners for a type with capacity and mode support.
+	GetAvailable(ctx context.Context, runnerType string, mode domain.ExecutionMode) ([]*domain.StageRunner, error)
+
+	// Unregister removes a runner registration.
+	Unregister(ctx context.Context, registrationID string) error
+
+	// UpdateHeartbeat refreshes the heartbeat and expiry.
+	UpdateHeartbeat(ctx context.Context, registrationID string, newExpiry time.Time) error
+
+	// IncrementLoad increases the current load counter.
+	IncrementLoad(ctx context.Context, registrationID string) error
+
+	// DecrementLoad decreases the current load counter.
+	DecrementLoad(ctx context.Context, registrationID string) error
+
+	// CleanupExpired removes expired registrations.
+	CleanupExpired(ctx context.Context) (int, error)
+
+	// List returns all registered runners.
+	List(ctx context.Context) ([]*domain.StageRunner, error)
+}
+
+// StageExecutionRepository provides access to the execution queue.
+type StageExecutionRepository interface {
+	// Create adds a new execution to the queue.
+	Create(ctx context.Context, exec *domain.StageExecution) error
+
+	// Get retrieves an execution by ID.
+	Get(ctx context.Context, executionID string) (*domain.StageExecution, error)
+
+	// GetByStageAttempt retrieves execution for a specific attempt.
+	GetByStageAttempt(ctx context.Context, workPlanID, stageID string, attemptIdx int) (*domain.StageExecution, error)
+
+	// Update updates an execution.
+	Update(ctx context.Context, exec *domain.StageExecution) error
+
+	// GetPending returns pending executions for a runner type, ordered by creation time.
+	GetPending(ctx context.Context, runnerType string, limit int) ([]*domain.StageExecution, error)
+
+	// MarkDispatched transitions execution to dispatched state.
+	MarkDispatched(ctx context.Context, executionID string, runnerID string) error
+
+	// MarkRunning transitions execution to running state.
+	MarkRunning(ctx context.Context, executionID string) error
+
+	// MarkComplete transitions execution to complete state.
+	MarkComplete(ctx context.Context, executionID string) error
+
+	// MarkFailed transitions execution to failed state.
+	MarkFailed(ctx context.Context, executionID string, errorMsg string) error
+
+	// UpdateProgress updates progress information.
+	UpdateProgress(ctx context.Context, executionID string, percent int, message string) error
+
+	// GetTimedOut returns executions that have exceeded their deadline.
+	GetTimedOut(ctx context.Context) ([]*domain.StageExecution, error)
+
+	// GetStale returns dispatched executions with no progress update within duration.
+	GetStale(ctx context.Context, staleDuration time.Duration) ([]*domain.StageExecution, error)
+}
+
 // UnitOfWork provides transactional access to all repositories.
 type UnitOfWork interface {
 	// Repository accessors
@@ -111,6 +184,8 @@ type UnitOfWork interface {
 	Checks() CheckRepository
 	Stages() StageRepository
 	Dependencies() DependencyRepository
+	StageRunners() StageRunnerRepository
+	StageExecutions() StageExecutionRepository
 
 	// Transaction control
 	Commit() error

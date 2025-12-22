@@ -295,7 +295,7 @@ const file_turboci_v1_workplan_proto_rawDesc = "" +
 	"\x12GetWorkPlanRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"H\n" +
 	"\x13GetWorkPlanResponse\x121\n" +
-	"\twork_plan\x18\x01 \x01(\v2\x14.turboci.v1.WorkPlanR\bworkPlanB@Z>github.com/example/turboci-lite/gen/proto/turboci/v1;turbocipbb\x06proto3"
+	"\twork_plan\x18\x01 \x01(\v2\x14.turboci.v1.WorkPlanR\bworkPlanB:Z8github.com/example/turboci-lite/gen/turboci/v1;turbocipbb\x06proto3"
 
 var (
 	file_turboci_v1_workplan_proto_rawDescOnce sync.Once

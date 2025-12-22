@@ -59,35 +59,104 @@ Edges between nodes with boolean logic predicates (AND/OR/threshold).
 Following the Goa design pattern, the codebase is organized into distinct layers with clean interfaces between them:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Transport Layer                       │
-│              (gRPC server, proto handling)               │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Transport Layer                          │
+│              (gRPC server, proto handling)                  │
+└─────────────────────────────────────────────────────────────┘
                             │
                             ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Endpoint Layer                        │
-│         (Request validation, auth, error mapping)        │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Endpoint Layer                           │
+│         (Request validation, auth, error mapping)           │
+└─────────────────────────────────────────────────────────────┘
                             │
                             ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Service Layer                         │
-│              (Business logic, orchestration)             │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Service Layer                            │
+│   ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐    │
+│   │Orchestrator │  │  Runner     │  │   Callback      │    │
+│   │  Service    │  │  Service    │  │   Service       │    │
+│   └──────┬──────┘  └──────┬──────┘  └────────┬────────┘    │
+│          │                │                   │             │
+│          └────────┬───────┴───────────────────┘             │
+│                   ▼                                         │
+│   ┌─────────────────────────────────────────────────────┐  │
+│   │              Dispatcher (background)                 │  │
+│   │   - Polls execution queue for pending work           │  │
+│   │   - Dispatches to registered runners                 │  │
+│   │   - Handles retries and timeouts                     │  │
+│   └─────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
                             │
                             ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Storage Layer                         │
-│               (Repository interfaces)                    │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Storage Layer                            │
+│               (Repository interfaces)                       │
+└─────────────────────────────────────────────────────────────┘
                             │
                             ▼
-┌─────────────────────────────────────────────────────────┐
-│                   SQLite Implementation                  │
-│              (Concrete storage backend)                  │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                   SQLite Implementation                     │
+│              (Concrete storage backend)                     │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+## Push-Based Execution Model
+
+TurboCI-Lite uses a push-based execution model where the orchestrator dispatches work to registered stage runners:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Orchestrator                            │
+│                          │                                  │
+│                          ▼                                  │
+│   ┌─────────────────────────────────────────────────────┐  │
+│   │              stage_executions (queue)                │  │
+│   │   - PENDING: waiting for dispatch                    │  │
+│   │   - DISPATCHED: sent to runner                       │  │
+│   │   - RUNNING: actively executing                      │  │
+│   │   - COMPLETE/FAILED: terminal states                 │  │
+│   └─────────────────────────────────────────────────────┘  │
+│                          │                                  │
+│              Dispatcher polls & dispatches                  │
+│                          │                                  │
+└──────────────────────────┼──────────────────────────────────┘
+                           │
+              ┌────────────┼────────────┐
+              │            │            │
+              ▼            ▼            ▼
+       ┌──────────┐  ┌──────────┐  ┌──────────┐
+       │ Runner A │  │ Runner B │  │ Runner C │
+       │ (build)  │  │  (test)  │  │ (deploy) │
+       │  :50052  │  │  :50053  │  │  :50054  │
+       └──────────┘  └──────────┘  └──────────┘
+```
+
+### Stage Runners
+
+Stage runners are long-lived gRPC servers that implement the `StageRunner` service:
+
+```protobuf
+service StageRunner {
+    rpc Run(RunRequest) returns (RunResponse);      // Sync execution
+    rpc RunAsync(RunAsyncRequest) returns (RunAsyncResponse);  // Async execution
+    rpc Ping(PingRequest) returns (PingResponse);   // Health check
+}
+```
+
+Runners register with the orchestrator via `RegisterStageRunner` and must periodically re-register (heartbeat) to stay active. Each runner specifies:
+- **runner_type**: What kind of work it handles (e.g., "build", "test")
+- **supported_modes**: SYNC, ASYNC, or both
+- **max_concurrent**: Capacity limit for load balancing
+- **ttl**: Time-to-live before registration expires
+
+### Execution Modes
+
+**Sync Execution**: Dispatcher calls `runner.Run()`, blocks until completion, applies check updates immediately.
+
+**Async Execution**: Dispatcher calls `runner.RunAsync()` which returns immediately. Runner later calls back via:
+- `UpdateExecution()` - Progress updates
+- `CompleteExecution()` - Final completion with check updates
 
 ## Directory Structure
 
@@ -100,6 +169,7 @@ turboci-lite/
 │   └── turboci/
 │       └── v1/
 │           ├── service.proto    # gRPC service definitions
+│           ├── stagerunner.proto # StageRunner service (for runners to implement)
 │           ├── workplan.proto   # WorkPlan messages
 │           ├── check.proto      # Check messages
 │           ├── stage.proto      # Stage messages
@@ -121,6 +191,9 @@ turboci-lite/
 │   │   └── validation.go        # Request validation
 │   ├── service/
 │   │   ├── orchestrator.go      # Core orchestration service
+│   │   ├── runner.go            # Runner registration service
+│   │   ├── dispatcher.go        # Background dispatcher (polls & dispatches)
+│   │   ├── callback.go          # Async callback handling
 │   │   ├── workplan.go          # WorkPlan business logic
 │   │   ├── check.go             # Check business logic
 │   │   ├── stage.go             # Stage business logic
@@ -133,12 +206,24 @@ turboci-lite/
 │   │       ├── workplan.go      # WorkPlan queries
 │   │       ├── check.go         # Check queries
 │   │       ├── stage.go         # Stage queries
+│   │       ├── runner.go        # StageRunner queries
+│   │       ├── execution.go     # StageExecution queries
 │   │       └── migrations.go    # Schema migrations
 │   └── domain/
 │       ├── workplan.go          # WorkPlan domain types
 │       ├── check.go             # Check domain types
 │       ├── stage.go             # Stage domain types
+│       ├── runner.go            # StageRunner domain types
+│       ├── execution.go         # StageExecution domain types
 │       └── dependency.go        # Dependency domain types
+├── testing/
+│   ├── TESTING_PLAN.md          # Integration test plan
+│   └── e2e/                     # End-to-end tests
+│       ├── helpers_test.go      # Test infrastructure (TestEnv, MockRunner)
+│       ├── basic_test.go        # Basic execution tests
+│       ├── runner_test.go       # Runner registration tests
+│       ├── workflow_test.go     # Complex workflow tests
+│       └── error_test.go        # Error handling tests
 └── pkg/
     └── id/
         └── generator.go         # ID generation utilities
@@ -154,7 +239,7 @@ Simplified protobuf definitions based on the original TurboCI protos.
 - Simplified dependency predicates (simple AND/OR, no complex thresholds)
 - No separate Datum/Value types (inline JSON for options/results)
 - No edit history tracking
-- Single executor type (in-process)
+- Push-based execution via registered stage runners
 
 ### 2. Transport Layer (`internal/transport/grpc/`)
 Handles gRPC server setup and proto message conversion.
@@ -180,17 +265,33 @@ type Endpoint func(ctx context.Context, request any) (response any, err error)
 ```
 
 ### 4. Service Layer (`internal/service/`)
-Core business logic and orchestration.
+Core business logic, orchestration, and execution dispatch.
 
 **OrchestratorService:**
 - `CreateWorkPlan(ctx, req) -> WorkPlan`
 - `WriteNodes(ctx, req) -> WriteNodesResponse`
 - `QueryNodes(ctx, req) -> QueryNodesResponse`
-
-**Internal Methods:**
 - Dependency resolution and state advancement
-- Stage attempt lifecycle management
-- Check state machine enforcement
+- Creates `StageExecution` when stages advance to ATTEMPTING
+
+**RunnerService:**
+- `RegisterRunner(ctx, req) -> RegistrationResponse` - Register or re-register (heartbeat)
+- `UnregisterRunner(ctx, registrationID) -> error` - Explicit unregistration
+- `ListRunners(ctx, filter) -> []StageRunner` - List active runners
+- `SelectRunner(ctx, runnerType, mode) -> *StageRunner` - Pick least-loaded runner
+
+**CallbackService:**
+- `UpdateExecution(ctx, req) -> error` - Progress updates from async runners
+- `CompleteExecution(ctx, req) -> error` - Final completion with check updates
+- `GetExecution(ctx, executionID) -> *StageExecution`
+
+**Dispatcher (Background Worker):**
+- Polls `stage_executions` table for PENDING work
+- Selects appropriate runner based on type and mode
+- Dispatches sync executions (blocks, applies results)
+- Dispatches async executions (returns immediately, runner calls back)
+- Handles expired runner cleanup
+- Handles stale/timed-out execution detection
 
 ### 5. Storage Layer (`internal/storage/`)
 Abstract repository interfaces for persistence.
@@ -227,12 +328,36 @@ type DependencyRepository interface {
     MarkResolved(ctx context.Context, depID string, satisfied bool) error
 }
 
+type StageRunnerRepository interface {
+    Create(ctx context.Context, runner *domain.StageRunner) error
+    Get(ctx context.Context, registrationID string) (*domain.StageRunner, error)
+    Delete(ctx context.Context, registrationID string) error
+    List(ctx context.Context, runnerType string) ([]*domain.StageRunner, error)
+    IncrementLoad(ctx context.Context, registrationID string) error
+    DecrementLoad(ctx context.Context, registrationID string) error
+    CleanupExpired(ctx context.Context) (int64, error)
+}
+
+type StageExecutionRepository interface {
+    Create(ctx context.Context, exec *domain.StageExecution) error
+    Get(ctx context.Context, executionID string) (*domain.StageExecution, error)
+    GetByStageAttempt(ctx context.Context, workPlanID, stageID string, attemptIdx int) (*domain.StageExecution, error)
+    ListPending(ctx context.Context, limit int) ([]*domain.StageExecution, error)
+    MarkDispatched(ctx context.Context, execID, runnerID string) error
+    MarkRunning(ctx context.Context, execID string) error
+    MarkComplete(ctx context.Context, execID string) error
+    MarkFailed(ctx context.Context, execID, errorMessage string) error
+    UpdateProgress(ctx context.Context, execID string, percent int, message string) error
+}
+
 // UnitOfWork for transactional operations
 type UnitOfWork interface {
     WorkPlans() WorkPlanRepository
     Checks() CheckRepository
     Stages() StageRepository
     Dependencies() DependencyRepository
+    StageRunners() StageRunnerRepository
+    StageExecutions() StageExecutionRepository
     Commit() error
     Rollback() error
 }
@@ -289,6 +414,8 @@ CREATE TABLE stages (
     work_plan_id TEXT NOT NULL REFERENCES work_plans(id),
     state INTEGER NOT NULL DEFAULT 10,  -- PLANNED
     args_json TEXT,  -- Stage arguments as JSON
+    execution_mode INTEGER DEFAULT 1,  -- 1=SYNC, 2=ASYNC
+    runner_type TEXT,  -- Type of runner to dispatch to
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
     version INTEGER NOT NULL DEFAULT 1,
@@ -337,11 +464,51 @@ CREATE TABLE dependencies (
     UNIQUE(work_plan_id, source_type, source_id, target_type, target_id)
 );
 
+-- Stage Runners (registered execution workers)
+CREATE TABLE stage_runners (
+    registration_id TEXT PRIMARY KEY,
+    id TEXT NOT NULL,  -- Runner's self-assigned ID
+    runner_type TEXT NOT NULL,
+    address TEXT NOT NULL,
+    supported_modes_json TEXT NOT NULL,  -- JSON array of execution modes
+    max_concurrent INTEGER DEFAULT 0,
+    current_load INTEGER DEFAULT 0,
+    metadata_json TEXT,
+    registered_at DATETIME NOT NULL,
+    last_heartbeat DATETIME NOT NULL,
+    expires_at DATETIME NOT NULL
+);
+
+-- Stage Executions (execution queue)
+CREATE TABLE stage_executions (
+    id TEXT PRIMARY KEY,
+    work_plan_id TEXT NOT NULL,
+    stage_id TEXT NOT NULL,
+    attempt_idx INTEGER NOT NULL,
+    runner_type TEXT NOT NULL,
+    execution_mode INTEGER DEFAULT 1,  -- 1=SYNC, 2=ASYNC
+    state INTEGER DEFAULT 10,  -- 10=PENDING, 20=DISPATCHED, 30=RUNNING, 40=COMPLETE, 50=FAILED
+    runner_id TEXT,  -- registration_id of assigned runner
+    dispatched_at DATETIME,
+    started_at DATETIME,
+    completed_at DATETIME,
+    deadline DATETIME,
+    progress_percent INTEGER DEFAULT 0,
+    progress_message TEXT,
+    error_message TEXT,
+    retry_count INTEGER DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    FOREIGN KEY (work_plan_id) REFERENCES work_plans(id)
+);
+
 -- Indexes
 CREATE INDEX idx_checks_work_plan ON checks(work_plan_id);
 CREATE INDEX idx_checks_state ON checks(work_plan_id, state);
 CREATE INDEX idx_stages_work_plan ON stages(work_plan_id);
 CREATE INDEX idx_stages_state ON stages(work_plan_id, state);
+CREATE INDEX idx_executions_pending ON stage_executions(state, runner_type) WHERE state = 10;
+CREATE INDEX idx_runners_type ON stage_runners(runner_type);
 CREATE INDEX idx_deps_source ON dependencies(work_plan_id, source_type, source_id);
 CREATE INDEX idx_deps_target ON dependencies(work_plan_id, target_type, target_id);
 ```
@@ -386,12 +553,13 @@ const (
 | Data storage | Typed Datum/Value with Any | JSON blobs |
 | Versioning | Revision with timestamps | Simple integer version |
 | Edit history | Full audit trail | None |
-| Executors | External services via gRPC | In-process only |
+| Executors | Complex scheduling | Push-based dispatch to registered runners |
 | Scaling | Distributed (Spanner/etc.) | Single SQLite instance |
 
 ## gRPC Service Definition (Simplified)
 
 ```protobuf
+// Orchestrator service - main API for workflow management
 service TurboCIOrchestrator {
     // Create a new empty WorkPlan
     rpc CreateWorkPlan(CreateWorkPlanRequest) returns (CreateWorkPlanResponse);
@@ -404,14 +572,27 @@ service TurboCIOrchestrator {
 
     // Get a specific WorkPlan
     rpc GetWorkPlan(GetWorkPlanRequest) returns (GetWorkPlanResponse);
+
+    // Runner registration (runners call these)
+    rpc RegisterStageRunner(RegisterRunnerRequest) returns (RegisterRunnerResponse);
+    rpc UnregisterStageRunner(UnregisterRunnerRequest) returns (UnregisterRunnerResponse);
+    rpc ListStageRunners(ListRunnersRequest) returns (ListRunnersResponse);
+
+    // Async execution callbacks (runners call these)
+    rpc UpdateStageExecution(UpdateExecutionRequest) returns (UpdateExecutionResponse);
+    rpc CompleteStageExecution(CompleteExecutionRequest) returns (CompleteExecutionResponse);
 }
 
-service TurboCIExecutor {
-    // Run a stage (simplified in-process execution)
-    rpc RunStage(RunStageRequest) returns (RunStageResponse);
+// StageRunner service - implemented by stage runners
+service StageRunner {
+    // Synchronous execution - blocks until complete
+    rpc Run(RunRequest) returns (RunResponse);
 
-    // Cancel a running stage
-    rpc CancelStage(CancelStageRequest) returns (CancelStageResponse);
+    // Asynchronous execution - returns immediately, runner calls back
+    rpc RunAsync(RunAsyncRequest) returns (RunAsyncResponse);
+
+    // Health check
+    rpc Ping(PingRequest) returns (PingResponse);
 }
 ```
 
@@ -478,13 +659,27 @@ type Config struct {
     MaxAttempts     int           `env:"MAX_ATTEMPTS" default:"3"`
     AttemptTimeout  time.Duration `env:"ATTEMPT_TIMEOUT" default:"5m"`
 }
+
+type DispatcherConfig struct {
+    PollInterval       time.Duration  // How often to poll for pending executions
+    CleanupInterval    time.Duration  // How often to cleanup expired registrations
+    StaleCheckInterval time.Duration  // How often to check for stale executions
+    StaleDuration      time.Duration  // Time after which dispatched execution is stale
+    DefaultTimeout     time.Duration  // Default execution timeout
+    CallbackAddress    string         // Address runners use for callbacks
+}
 ```
 
 ## Testing Strategy
 
 1. **Unit Tests**: Each layer tested in isolation with mocks
-2. **Integration Tests**: Full stack tests with in-memory SQLite
-3. **Contract Tests**: Proto compatibility validation
+2. **Integration Tests**: Full stack tests with file-based SQLite (WAL mode)
+3. **End-to-End Tests** (`testing/e2e/`): Complete execution flow tests with MockRunner
+   - Basic sync/async execution
+   - Runner registration and lifecycle
+   - Complex workflow patterns (diamond, fan-out/fan-in, chains)
+   - Error handling (runner failures, timeouts, partial failures)
+4. **Contract Tests**: Proto compatibility validation
 
 ## Future Extensibility
 

@@ -9,7 +9,45 @@ TurboCI-Lite is a simplified, monolithic gRPC-based workflow orchestration servi
 
 ## Architecture Overview
 
-The system follows a layered architecture (Goa-inspired):
+The system uses a **push-based execution model** where the orchestrator dispatches work to registered stage runners via gRPC.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Orchestrator                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐   │
+│  │ Orchestrator │  │   Runner     │  │    Callback      │   │
+│  │   Service    │  │   Service    │  │    Service       │   │
+│  └──────┬───────┘  └──────┬───────┘  └────────┬─────────┘   │
+│         │                 │                    │             │
+│         ▼                 ▼                    ▼             │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │              Dispatcher (background)                 │    │
+│  │   - Polls execution queue for pending work           │    │
+│  │   - Dispatches to registered runners                 │    │
+│  │   - Handles retries and timeouts                     │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                            │                                 │
+│                            ▼                                 │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │              SQLite Storage                          │    │
+│  │   - stage_runners (registrations)                    │    │
+│  │   - stage_executions (durable queue)                 │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+              │                           ▲
+              │ Stage.Run()               │ CompleteExecution()
+              │ Stage.RunAsync()          │ UpdateExecution()
+              ▼                           │
+┌─────────────────────────────────────────────────────────────┐
+│                    Stage Runners                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
+│  │ build_runner │  │ test_runner  │  │ plan_runner  │       │
+│  │   :50052     │  │   :50053     │  │   :50054     │       │
+│  └──────────────┘  └──────────────┘  └──────────────┘       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Layered Architecture
 
 ```
 Client Requests
@@ -48,6 +86,10 @@ An executable unit of work with retry tracking. Stages have Assignments that tar
 - `AWAITING_GROUP` (30) → Waiting for related work
 - `FINAL` (40) → Complete (terminal)
 
+**Stage Fields:**
+- `execution_mode` - SYNC or ASYNC execution
+- `runner_type` - Which runner handles this stage (e.g., "build_executor", "test_executor")
+
 ### Attempt
 A single execution attempt within a Stage.
 
@@ -63,17 +105,33 @@ Directed edges between nodes with AND/OR predicates:
 - **AND**: All dependencies must be satisfied
 - **OR**: At least one dependency must be satisfied
 
+### Stage Runners
+Long-lived gRPC servers that implement the `StageRunner` service. They register with the orchestrator and receive execution requests.
+
+**Runner Registration:**
+- Runners register with `runner_type`, endpoint address, supported modes, and capacity
+- Registrations have TTL and require heartbeat renewal
+- Orchestrator tracks current load per runner
+
+### Execution Modes
+- **SYNC**: Orchestrator calls `Run()`, blocks until completion
+- **ASYNC**: Orchestrator calls `RunAsync()`, runner calls back with `CompleteStageExecution()`
+
 ## Directory Structure
 
 ```
 turboci-lite/
-├── cmd/server/main.go          # Server entry point
+├── cmd/
+│   ├── server/main.go          # Orchestrator server entry point
+│   └── runner-example/main.go  # Example stage runner implementation
 ├── internal/
 │   ├── domain/                 # Pure domain models
 │   │   ├── workplan.go         # WorkPlan entity
 │   │   ├── check.go            # Check, CheckResult, CheckState
 │   │   ├── stage.go            # Stage, Attempt, AttemptState
 │   │   ├── dependency.go       # Dependency, DependencyGroup
+│   │   ├── execution.go        # StageExecution (queue entry)
+│   │   ├── runner.go           # StageRunner (registration)
 │   │   └── errors.go           # Domain errors
 │   ├── storage/                # Repository interfaces
 │   │   ├── repository.go       # Abstract interfaces
@@ -83,59 +141,96 @@ turboci-lite/
 │   │       ├── workplan.go     # WorkPlan queries
 │   │       ├── check.go        # Check queries
 │   │       ├── stage.go        # Stage queries
-│   │       └── dependency.go   # Dependency queries
+│   │       ├── dependency.go   # Dependency queries
+│   │       ├── runner.go       # StageRunner queries
+│   │       └── execution.go    # StageExecution queries
 │   ├── service/
-│   │   └── orchestrator.go     # Core business logic
+│   │   ├── orchestrator.go     # Core business logic
+│   │   ├── runner.go           # Runner registration service
+│   │   ├── dispatcher.go       # Background work dispatcher
+│   │   └── callback.go         # Async completion handling
 │   ├── endpoint/
 │   │   └── endpoint.go         # Validation, error mapping
 │   └── transport/grpc/
 │       ├── server.go           # gRPC server setup
 │       └── handlers.go         # Proto ↔ Domain conversion
 ├── proto/turboci/v1/           # Protocol buffer definitions
-│   ├── service.proto           # gRPC service definition
+│   ├── service.proto           # Orchestrator gRPC service
+│   ├── stagerunner.proto       # StageRunner gRPC service
 │   ├── workplan.proto          # WorkPlan messages
 │   ├── check.proto             # Check messages
 │   ├── stage.proto             # Stage messages
-│   └── common.proto            # Shared enums
+│   └── common.proto            # Shared enums (includes ExecutionMode)
 ├── client/
-│   └── pipeline.go             # High-level pipeline runner
+│   └── pipeline.go             # High-level pipeline runner (legacy)
 ├── pkg/id/
 │   └── generator.go            # UUID generation
 ├── go.mod
 └── Makefile
 ```
 
-## gRPC API
+## gRPC APIs
 
-The service exposes 4 RPCs:
+### TurboCIOrchestrator Service
 
-### CreateWorkPlan
-Creates a new empty WorkPlan.
+The main orchestrator service exposes these RPCs:
 
+**Workflow Management:**
 ```protobuf
 rpc CreateWorkPlan(CreateWorkPlanRequest) returns (CreateWorkPlanResponse)
-```
-
-### GetWorkPlan
-Retrieves a WorkPlan by ID.
-
-```protobuf
 rpc GetWorkPlan(GetWorkPlanRequest) returns (GetWorkPlanResponse)
-```
-
-### WriteNodes
-Atomically writes/updates multiple Checks and Stages. This is the primary method for building and modifying workflows.
-
-```protobuf
 rpc WriteNodes(WriteNodesRequest) returns (WriteNodesResponse)
-```
-
-### QueryNodes
-Queries nodes with filtering by state, type, etc.
-
-```protobuf
 rpc QueryNodes(QueryNodesRequest) returns (QueryNodesResponse)
 ```
+
+**Runner Registration:**
+```protobuf
+rpc RegisterStageRunner(RegisterStageRunnerRequest) returns (RegisterStageRunnerResponse)
+rpc UnregisterStageRunner(UnregisterStageRunnerRequest) returns (UnregisterStageRunnerResponse)
+rpc ListStageRunners(ListStageRunnersRequest) returns (ListStageRunnersResponse)
+```
+
+**Async Callbacks (called by runners):**
+```protobuf
+rpc UpdateStageExecution(UpdateStageExecutionRequest) returns (UpdateStageExecutionResponse)
+rpc CompleteStageExecution(CompleteStageExecutionRequest) returns (CompleteStageExecutionResponse)
+```
+
+### StageRunner Service
+
+The service that stage runners implement:
+
+```protobuf
+service StageRunner {
+  // Run executes a stage synchronously, blocking until complete
+  rpc Run(RunRequest) returns (RunResponse);
+
+  // RunAsync starts async execution, returns immediately
+  // Runner must call back to orchestrator with completion
+  rpc RunAsync(RunAsyncRequest) returns (RunAsyncResponse);
+
+  // Ping checks if runner is healthy and available
+  rpc Ping(PingRequest) returns (PingResponse);
+}
+```
+
+## Execution Flow
+
+### Sync Execution
+1. Stage advances to ATTEMPTING → creates `StageExecution` (PENDING)
+2. Dispatcher picks up pending execution, selects available runner
+3. Dispatcher calls `runner.Run()` (blocks)
+4. Runner executes, returns `RunResponse` with check updates
+5. Dispatcher applies updates via orchestrator, marks execution COMPLETE
+
+### Async Execution
+1. Stage advances to ATTEMPTING → creates `StageExecution` (PENDING)
+2. Dispatcher picks up pending execution, selects available runner
+3. Dispatcher calls `runner.RunAsync()` (returns immediately)
+4. Runner acknowledges, starts background work
+5. Runner calls `orchestrator.UpdateStageExecution()` for progress
+6. Runner calls `orchestrator.CompleteStageExecution()` when done
+7. Callback service applies updates, marks execution COMPLETE
 
 ## Configuration
 
@@ -162,13 +257,13 @@ make run
 make test
 ```
 
-## Example: Creating a Pipeline
+## Example: Creating a Pipeline with Push Execution
 
 ```go
 // Create work plan
 wp, _ := orchestrator.CreateWorkPlan(ctx, &CreateWorkPlanRequest{})
 
-// Write planning check and stage
+// Write planning stage with runner type
 orchestrator.WriteNodes(ctx, &WriteNodesRequest{
     WorkPlanID: wp.ID,
     Checks: []*CheckWrite{{
@@ -176,7 +271,9 @@ orchestrator.WriteNodes(ctx, &WriteNodesRequest{
         State: CheckStatePlanning,
     }},
     Stages: []*StageWrite{{
-        ID: "plan-stage",
+        ID:            "plan-stage",
+        RunnerType:    "planning",
+        ExecutionMode: ExecutionModeSync,
         Assignments: []Assignment{{
             TargetCheckID: "plan-check",
             GoalState:     CheckStateFinal,
@@ -184,7 +281,7 @@ orchestrator.WriteNodes(ctx, &WriteNodesRequest{
     }},
 })
 
-// Write build check with dependency on planning
+// Write build stage with async execution
 orchestrator.WriteNodes(ctx, &WriteNodesRequest{
     WorkPlanID: wp.ID,
     Checks: []*CheckWrite{{
@@ -198,13 +295,81 @@ orchestrator.WriteNodes(ctx, &WriteNodesRequest{
         },
     }},
     Stages: []*StageWrite{{
-        ID: "build-stage",
+        ID:            "build-stage",
+        RunnerType:    "build_executor",
+        ExecutionMode: ExecutionModeAsync,
         Assignments: []Assignment{{
             TargetCheckID: "build-check",
             GoalState:     CheckStateFinal,
         }},
     }},
 })
+```
+
+## Example: Implementing a Stage Runner
+
+```go
+type BuildRunner struct {
+    pb.UnimplementedStageRunnerServer
+    orchestratorClient pb.TurboCIOrchestratorClient
+}
+
+func (r *BuildRunner) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunResponse, error) {
+    // Execute build synchronously
+    result := executeBuild(req.Args)
+
+    return &pb.RunResponse{
+        StageState: pb.StageState_STAGE_STATE_FINAL,
+        CheckUpdates: []*pb.CheckUpdate{{
+            CheckId:    req.AssignedCheckIds[0],
+            State:      pb.CheckState_CHECK_STATE_FINAL,
+            ResultData: result,
+            Finalize:   true,
+        }},
+    }, nil
+}
+
+func (r *BuildRunner) RunAsync(ctx context.Context, req *pb.RunAsyncRequest) (*pb.RunAsyncResponse, error) {
+    // Start async execution
+    go func() {
+        result := executeBuild(req.Args)
+
+        // Report completion via callback
+        r.orchestratorClient.CompleteStageExecution(ctx, &pb.CompleteStageExecutionRequest{
+            ExecutionId: req.ExecutionId,
+            StageState:  pb.StageState_STAGE_STATE_FINAL,
+            CheckUpdates: []*pb.CheckUpdate{{
+                CheckId:    req.AssignedCheckIds[0],
+                State:      pb.CheckState_CHECK_STATE_FINAL,
+                ResultData: result,
+                Finalize:   true,
+            }},
+        })
+    }()
+
+    return &pb.RunAsyncResponse{Accepted: true}, nil
+}
+
+func main() {
+    // Register with orchestrator
+    orchestratorConn, _ := grpc.Dial("localhost:50051", grpc.WithInsecure())
+    client := pb.NewTurboCIOrchestratorClient(orchestratorConn)
+
+    resp, _ := client.RegisterStageRunner(ctx, &pb.RegisterStageRunnerRequest{
+        RunnerId:       "build-runner-1",
+        RunnerType:     "build_executor",
+        Address:        "localhost:50052",
+        SupportedModes: []pb.ExecutionMode{pb.EXECUTION_MODE_SYNC, pb.EXECUTION_MODE_ASYNC},
+        MaxConcurrent:  5,
+        TtlSeconds:     300,
+    })
+
+    // Start gRPC server
+    lis, _ := net.Listen("tcp", ":50052")
+    server := grpc.NewServer()
+    pb.RegisterStageRunnerServer(server, &BuildRunner{orchestratorClient: client})
+    server.Serve(lis)
+}
 ```
 
 ## Testing with grpcurl
@@ -216,8 +381,18 @@ grpcurl -plaintext localhost:50051 list
 # Create a work plan
 grpcurl -plaintext -d '{}' localhost:50051 turboci.v1.TurboCIOrchestrator/CreateWorkPlan
 
-# Get a work plan
-grpcurl -plaintext -d '{"id":"<work-plan-id>"}' localhost:50051 turboci.v1.TurboCIOrchestrator/GetWorkPlan
+# Register a stage runner
+grpcurl -plaintext -d '{
+  "runner_id": "test-runner",
+  "runner_type": "build_executor",
+  "address": "localhost:50052",
+  "supported_modes": ["EXECUTION_MODE_SYNC"],
+  "max_concurrent": 5,
+  "ttl_seconds": 300
+}' localhost:50051 turboci.v1.TurboCIOrchestrator/RegisterStageRunner
+
+# List registered runners
+grpcurl -plaintext -d '{}' localhost:50051 turboci.v1.TurboCIOrchestrator/ListStageRunners
 ```
 
 ## Error Handling
@@ -228,20 +403,31 @@ Domain errors are mapped to gRPC status codes:
 - `ErrConcurrentModify` → `codes.Aborted`
 - `ErrInvalidArgument` → `codes.InvalidArgument`
 - `ErrAlreadyExists` → `codes.AlreadyExists`
+- `ErrRunnerNotFound` → `codes.NotFound`
+- `ErrRunnerUnavailable` → `codes.Unavailable`
+- `ErrExecutionNotFound` → `codes.NotFound`
 
 ## Database Schema
 
 Core tables (in `internal/storage/sqlite/migrations.go`):
 - `work_plans` - Workflow containers
 - `checks` - Non-executable objectives
-- `stages` - Executable work units
+- `stages` - Executable work units (includes `execution_mode`, `runner_type`)
 - `stage_attempts` - Execution attempts
 - `check_results` - Results from attempts
 - `dependencies` - Graph edges between nodes
+- `stage_runners` - Runner registrations with TTL
+- `stage_executions` - Durable execution queue
 
 SQLite is configured with WAL mode for better concurrency.
 
 ## Design Decisions
+
+**Push-based execution model:**
+- Orchestrator dispatches work to registered runners via gRPC
+- Runners implement the `StageRunner` service
+- Supports both sync (blocking) and async (callback) execution modes
+- SQLite-backed execution queue for durability across restarts
 
 **Simplifications from full TurboCI:**
 - No realm-based security (single security context)
@@ -249,10 +435,29 @@ SQLite is configured with WAL mode for better concurrency.
 - JSON storage for options/results
 - No edit history tracking
 - Single SQLite instance (not distributed)
-- In-process execution via PipelineRunner
 
 **Trade-offs:**
 - Easy to deploy and understand
 - Single-machine scalability limit
 - No multi-tenant isolation
 - No audit trail
+
+## Testing
+
+**E2E Test Infrastructure** (`testing/e2e/`):
+- `TestEnv` - Complete test environment with all services
+- `MockRunner` - In-process mock implementing `StageRunnerClient`
+- File-based SQLite with WAL mode for concurrent access
+- 22 comprehensive tests covering:
+  - Basic sync/async execution
+  - Runner registration and lifecycle
+  - Complex workflows (diamond deps, fan-out, chains)
+  - Error handling (runner failures, timeouts)
+
+```bash
+# Run E2E tests
+cd testing/e2e && go test -v
+
+# Run specific test
+go test -v -run TestBasicSyncExecution
+```

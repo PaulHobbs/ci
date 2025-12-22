@@ -10,19 +10,44 @@ import (
 
 	pb "github.com/example/turboci-lite/gen/turboci/v1"
 	"github.com/example/turboci-lite/internal/endpoint"
+	"github.com/example/turboci-lite/internal/service"
 )
 
 // Server is the gRPC server for TurboCIOrchestrator.
 type Server struct {
 	pb.UnimplementedTurboCIOrchestratorServer
-	endpoints  endpoint.Endpoints
-	grpcServer *grpc.Server
+	endpoints       endpoint.Endpoints
+	runnerService   *service.RunnerService
+	callbackService *service.CallbackService
+	grpcServer      *grpc.Server
+}
+
+// ServerOption is a functional option for configuring the Server.
+type ServerOption func(*Server)
+
+// WithRunnerService sets the runner service.
+func WithRunnerService(svc *service.RunnerService) ServerOption {
+	return func(s *Server) {
+		s.runnerService = svc
+	}
+}
+
+// WithCallbackService sets the callback service.
+func WithCallbackService(svc *service.CallbackService) ServerOption {
+	return func(s *Server) {
+		s.callbackService = svc
+	}
 }
 
 // NewServer creates a new gRPC server.
-func NewServer(endpoints endpoint.Endpoints) *Server {
+func NewServer(endpoints endpoint.Endpoints, opts ...ServerOption) *Server {
 	s := &Server{
 		endpoints: endpoints,
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(s)
 	}
 
 	// Create gRPC server with interceptors

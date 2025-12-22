@@ -26,4 +26,19 @@ var (
 
 	// ErrAttemptClaimed is returned when a stage attempt is already claimed.
 	ErrAttemptClaimed = errors.New("attempt already claimed by another process")
+
+	// ErrRunnerNotFound is returned when no runner is registered for a type.
+	ErrRunnerNotFound = errors.New("no runner registered for stage type")
+
+	// ErrRunnerUnavailable is returned when runner cannot accept work.
+	ErrRunnerUnavailable = errors.New("runner unavailable or at capacity")
+
+	// ErrExecutionNotFound is returned when an execution ID is not found.
+	ErrExecutionNotFound = errors.New("execution not found")
+
+	// ErrExecutionExpired is returned when an execution has timed out.
+	ErrExecutionExpired = errors.New("execution expired")
+
+	// ErrInvalidCallback is returned when callback data is invalid.
+	ErrInvalidCallback = errors.New("invalid callback data")
 )

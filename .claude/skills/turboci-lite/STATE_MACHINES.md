@@ -198,6 +198,75 @@ func (s AttemptState) CanTransitionTo(target AttemptState) bool {
 }
 ```
 
+## Execution State Machine
+
+Stage executions represent dispatched work to stage runners.
+
+```
+┌──────────────┐
+│   PENDING    │ (10) - Execution created, waiting for dispatch
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│  DISPATCHED  │ (20) - Sent to runner, awaiting response
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│   RUNNING    │ (30) - Actively executing on runner
+└──────┬───────┘
+       │
+       ├─────────────────┐
+       ▼                 ▼
+┌──────────────┐  ┌──────────────┐
+│   COMPLETE   │  │    FAILED    │
+│     (40)     │  │     (50)     │
+└──────────────┘  └──────────────┘
+   (success)        (failure)
+```
+
+### Valid Execution Transitions
+
+| From | To | When |
+|------|-----|------|
+| PENDING | DISPATCHED | Runner selected, request sent |
+| DISPATCHED | RUNNING | Runner acknowledges (async) or starts (sync) |
+| DISPATCHED | FAILED | Runner unavailable or dispatch failed |
+| RUNNING | COMPLETE | Execution succeeded |
+| RUNNING | FAILED | Execution failed or timed out |
+
+### Execution State Code
+
+Located in `internal/domain/execution.go`:
+
+```go
+type ExecutionState int
+
+const (
+    ExecutionStatePending    ExecutionState = 10
+    ExecutionStateDispatched ExecutionState = 20
+    ExecutionStateRunning    ExecutionState = 30
+    ExecutionStateComplete   ExecutionState = 40
+    ExecutionStateFailed     ExecutionState = 50
+)
+
+func (s ExecutionState) IsFinal() bool {
+    return s == ExecutionStateComplete || s == ExecutionStateFailed
+}
+```
+
+### Execution Modes
+
+```go
+type ExecutionMode int
+
+const (
+    ExecutionModeSync  ExecutionMode = 1  // Dispatcher blocks until complete
+    ExecutionModeAsync ExecutionMode = 2  // Runner calls back when done
+)
+```
+
 ## Dependency Resolution
 
 When a node reaches FINAL state:

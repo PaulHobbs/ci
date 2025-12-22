@@ -1,11 +1,9 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,14 +14,14 @@ import (
 )
 
 var (
-	maxCulprits     int
-	repetitions     int
-	confidence      float64
-	flakeRate       float64
-	testTimeout     time.Duration
-	worktreeDir     string
-	interactive     bool
-	randomSeed      int64
+	maxCulprits int
+	repetitions int
+	confidence  float64
+	flakeRate   float64
+	testTimeout time.Duration
+	worktreeDir string
+	interactive bool
+	randomSeed  int64
 )
 
 var startCmd = &cobra.Command{
@@ -82,8 +80,6 @@ func init() {
 }
 
 func runStart(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
-
 	// Find repository root
 	repoPath, err := findGitRoot()
 	if err != nil {

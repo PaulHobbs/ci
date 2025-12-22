@@ -2,12 +2,15 @@ syntax = "proto3";
 
 package turboci.v1;
 
-option go_package = "github.com/example/turboci-lite/gen/proto/turboci/v1;turbocipb";
+option go_package = "github.com/example/turboci-lite/gen/turboci/v1;turbocipb";
 
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
 import "turboci/v1/workplan.proto";
 import "turboci/v1/check.proto";
 import "turboci/v1/stage.proto";
 import "turboci/v1/common.proto";
+import "turboci/v1/stagerunner.proto";
 
 // TurboCIOrchestrator is the main API for interacting with the workflow engine.
 service TurboCIOrchestrator {
@@ -22,6 +25,25 @@ service TurboCIOrchestrator {
 
   // QueryNodes queries nodes in the workflow graph.
   rpc QueryNodes(QueryNodesRequest) returns (QueryNodesResponse);
+
+  // === Stage Runner Registration ===
+
+  // RegisterStageRunner registers a stage runner with the orchestrator.
+  rpc RegisterStageRunner(RegisterStageRunnerRequest) returns (RegisterStageRunnerResponse);
+
+  // UnregisterStageRunner removes a stage runner registration.
+  rpc UnregisterStageRunner(UnregisterStageRunnerRequest) returns (UnregisterStageRunnerResponse);
+
+  // ListStageRunners returns all registered stage runners.
+  rpc ListStageRunners(ListStageRunnersRequest) returns (ListStageRunnersResponse);
+
+  // === Async Execution Callbacks (called by stage runners) ===
+
+  // UpdateStageExecution reports progress on an async execution.
+  rpc UpdateStageExecution(UpdateStageExecutionRequest) returns (UpdateStageExecutionResponse);
+
+  // CompleteStageExecution reports completion of an async execution.
+  rpc CompleteStageExecution(CompleteStageExecutionRequest) returns (CompleteStageExecutionResponse);
 }
 
 // WriteNodesRequest atomically writes multiple checks and stages.
@@ -76,4 +98,115 @@ message QueryNodesResponse {
 
   // Matching stages
   repeated Stage stages = 2;
+}
+
+// === Stage Runner Registration Messages ===
+
+// RegisterStageRunnerRequest registers a stage runner with the orchestrator.
+message RegisterStageRunnerRequest {
+  // Unique identifier for this runner instance
+  string runner_id = 1;
+
+  // Type of stages this runner handles (e.g., "build_executor", "test_executor")
+  string runner_type = 2;
+
+  // gRPC endpoint address (e.g., "localhost:50052")
+  string address = 3;
+
+  // Supported execution modes
+  repeated ExecutionMode supported_modes = 4;
+
+  // Maximum concurrent executions (0 = unlimited)
+  int32 max_concurrent = 5;
+
+  // TTL for registration in seconds (auto-unregister after this duration without heartbeat)
+  int64 ttl_seconds = 6;
+
+  // Optional metadata
+  map<string, string> metadata = 7;
+}
+
+// RegisterStageRunnerResponse returns the registration info.
+message RegisterStageRunnerResponse {
+  // Registration ID for renewal/unregistration
+  string registration_id = 1;
+
+  // When the registration expires (must renew before this)
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+// UnregisterStageRunnerRequest removes a runner registration.
+message UnregisterStageRunnerRequest {
+  string registration_id = 1;
+}
+
+// UnregisterStageRunnerResponse is empty on success.
+message UnregisterStageRunnerResponse {}
+
+// ListStageRunnersRequest lists registered runners.
+message ListStageRunnersRequest {
+  // Optional filter by runner type
+  string runner_type = 1;
+}
+
+// ListStageRunnersResponse returns registered runners.
+message ListStageRunnersResponse {
+  repeated StageRunnerInfo runners = 1;
+}
+
+// StageRunnerInfo describes a registered stage runner.
+message StageRunnerInfo {
+  string runner_id = 1;
+  string registration_id = 2;
+  string runner_type = 3;
+  string address = 4;
+  repeated ExecutionMode supported_modes = 5;
+  int32 max_concurrent = 6;
+  int32 current_load = 7;
+  google.protobuf.Timestamp registered_at = 8;
+  google.protobuf.Timestamp last_heartbeat = 9;
+  google.protobuf.Timestamp expires_at = 10;
+  map<string, string> metadata = 11;
+}
+
+// === Async Execution Callback Messages ===
+
+// UpdateStageExecutionRequest reports progress on an async execution.
+message UpdateStageExecutionRequest {
+  string execution_id = 1;
+
+  // Progress message
+  string message = 2;
+
+  // Optional progress percentage (0-100)
+  int32 progress_percent = 3;
+
+  // Optional details
+  google.protobuf.Struct details = 4;
+}
+
+// UpdateStageExecutionResponse is empty on success.
+message UpdateStageExecutionResponse {}
+
+// CompleteStageExecutionRequest reports completion of an async execution.
+message CompleteStageExecutionRequest {
+  string execution_id = 1;
+
+  // Final stage state
+  StageState stage_state = 2;
+
+  // Check updates
+  repeated CheckUpdate check_updates = 3;
+
+  // Failure if execution failed
+  Failure failure = 4;
+
+  // Execution details
+  google.protobuf.Struct details = 5;
+}
+
+// CompleteStageExecutionResponse confirms completion was processed.
+message CompleteStageExecutionResponse {
+  // Acknowledgment
+  bool acknowledged = 1;
 }

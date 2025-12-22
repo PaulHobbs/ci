@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package turboci.v1;
 
-option go_package = "github.com/example/turboci-lite/gen/proto/turboci/v1;turbocipb";
+option go_package = "github.com/example/turboci-lite/gen/turboci/v1;turbocipb";
 
 import "google/protobuf/timestamp.proto";
 

@@ -3,7 +3,11 @@
     "allow": [
       "Bash(tree:*)",
       "Skill(turboci-lite)",
-      "Bash(ls -la /Users/phobbs/Downloads/luci-go-refs_heads_main/turboci-lite/*.mod)"
+      "Bash(ls -la /Users/phobbs/Downloads/luci-go-refs_heads_main/turboci-lite/*.mod)",
+      "Bash(ls:*)",
+      "Bash(make proto:*)",
+      "Bash(make test:*)",
+      "Bash(go mod tidy:*)"
     ]
   }
 }

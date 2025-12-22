@@ -456,7 +456,7 @@ const file_turboci_v1_check_proto_rawDesc = "" +
 	"\bowner_id\x18\x02 \x01(\tR\aownerId\x12+\n" +
 	"\x04data\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x04data\x12\x1a\n" +
 	"\bfinalize\x18\x04 \x01(\bR\bfinalize\x12-\n" +
-	"\afailure\x18\x05 \x01(\v2\x13.turboci.v1.FailureR\afailureB@Z>github.com/example/turboci-lite/gen/proto/turboci/v1;turbocipbb\x06proto3"
+	"\afailure\x18\x05 \x01(\v2\x13.turboci.v1.FailureR\afailureB:Z8github.com/example/turboci-lite/gen/turboci/v1;turbocipbb\x06proto3"
 
 var (
 	file_turboci_v1_check_proto_rawDescOnce sync.Once

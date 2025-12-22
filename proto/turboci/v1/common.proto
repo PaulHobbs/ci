@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package turboci.v1;
 
-option go_package = "github.com/example/turboci-lite/gen/proto/turboci/v1;turbocipb";
+option go_package = "github.com/example/turboci-lite/gen/turboci/v1;turbocipb";
 
 import "google/protobuf/timestamp.proto";
 
@@ -46,6 +46,13 @@ enum NodeType {
   NODE_TYPE_UNKNOWN = 0;
   NODE_TYPE_CHECK = 1;
   NODE_TYPE_STAGE = 2;
+}
+
+// ExecutionMode specifies how a stage should be executed.
+enum ExecutionMode {
+  EXECUTION_MODE_UNKNOWN = 0;
+  EXECUTION_MODE_SYNC = 1;   // Block until completion
+  EXECUTION_MODE_ASYNC = 2;  // Return immediately, callback on completion
 }
 
 // Dependency represents an edge from one node to another.

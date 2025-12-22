@@ -165,7 +165,8 @@ func (s *OrchestratorService) getDependencyResolution(ctx context.Context, uow s
 	return resolved, nil
 }
 
-// advanceStageToAttempting advances a stage to ATTEMPTING and creates the first attempt.
+// advanceStageToAttempting advances a stage to ATTEMPTING, creates the first attempt,
+// and queues a StageExecution for the dispatcher.
 func (s *OrchestratorService) advanceStageToAttempting(ctx context.Context, uow storage.UnitOfWork, stage *domain.Stage) error {
 	stage.State = domain.StageStateAttempting
 	stage.UpdatedAt = time.Now().UTC()
@@ -187,6 +188,19 @@ func (s *OrchestratorService) advanceStageToAttempting(ctx context.Context, uow 
 
 	if err := uow.Stages().AddAttempt(ctx, stage.WorkPlanID, stage.ID, &attempt); err != nil {
 		return err
+	}
+
+	// Create a StageExecution entry for the dispatcher to pick up.
+	// Only create if runner type is specified (push-based execution).
+	if stage.RunnerType != "" {
+		executionMode := stage.ExecutionMode
+		if executionMode == domain.ExecutionModeUnknown {
+			executionMode = domain.ExecutionModeSync // Default to sync
+		}
+		exec := domain.NewStageExecution(stage.WorkPlanID, stage.ID, attempt.Idx, stage.RunnerType, executionMode)
+		if err := uow.StageExecutions().Create(ctx, exec); err != nil {
+			return err
+		}
 	}
 
 	return nil

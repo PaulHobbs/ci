@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 
@@ -16,14 +17,36 @@ type SQLiteStorage struct {
 
 // New creates a new SQLite storage instance.
 func New(path string) (*SQLiteStorage, error) {
-	db, err := sql.Open("sqlite3", path+"?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=ON")
+	isMemory := strings.Contains(path, ":memory:") || strings.Contains(path, "mode=memory")
+
+	// Build connection string with SQLite pragmas.
+	// Use & if path already has query params, otherwise use ?
+	separator := "?"
+	if strings.Contains(path, "?") {
+		separator = "&"
+	}
+
+	// WAL mode doesn't work well with shared memory databases, so skip it for memory.
+	// Use longer busy timeout for memory databases with concurrent access.
+	var pragmas string
+	if isMemory {
+		pragmas = "_busy_timeout=10000&_foreign_keys=ON"
+	} else {
+		pragmas = "_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=ON"
+	}
+	dsn := path + separator + pragmas
+
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, err
 	}
 
-	// Set connection pool settings
-	db.SetMaxOpenConns(1) // SQLite works best with single connection for writes
-	db.SetMaxIdleConns(1)
+	// Set connection pool settings.
+	// Allow multiple connections for concurrent read transactions.
+	// WAL mode (enabled for file-based DBs) handles write serialization safely.
+	// Without this, multiple goroutines trying to begin transactions will deadlock.
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
 
 	return &SQLiteStorage{db: db}, nil
 }
@@ -49,20 +72,24 @@ func (s *SQLiteStorage) Migrate(ctx context.Context) error {
 
 // unitOfWork implements the UnitOfWork interface.
 type unitOfWork struct {
-	tx           *sql.Tx
-	workPlans    *workPlanRepo
-	checks       *checkRepo
-	stages       *stageRepo
-	dependencies *dependencyRepo
+	tx              *sql.Tx
+	workPlans       *workPlanRepo
+	checks          *checkRepo
+	stages          *stageRepo
+	dependencies    *dependencyRepo
+	stageRunners    *stageRunnerRepo
+	stageExecutions *stageExecutionRepo
 }
 
 func newUnitOfWork(tx *sql.Tx) *unitOfWork {
 	return &unitOfWork{
-		tx:           tx,
-		workPlans:    &workPlanRepo{tx: tx},
-		checks:       &checkRepo{tx: tx},
-		stages:       &stageRepo{tx: tx},
-		dependencies: &dependencyRepo{tx: tx},
+		tx:              tx,
+		workPlans:       &workPlanRepo{tx: tx},
+		checks:          &checkRepo{tx: tx},
+		stages:          &stageRepo{tx: tx},
+		dependencies:    &dependencyRepo{tx: tx},
+		stageRunners:    &stageRunnerRepo{tx: tx},
+		stageExecutions: &stageExecutionRepo{tx: tx},
 	}
 }
 
@@ -80,6 +107,14 @@ func (u *unitOfWork) Stages() storage.StageRepository {
 
 func (u *unitOfWork) Dependencies() storage.DependencyRepository {
 	return u.dependencies
+}
+
+func (u *unitOfWork) StageRunners() storage.StageRunnerRepository {
+	return u.stageRunners
+}
+
+func (u *unitOfWork) StageExecutions() storage.StageExecutionRepository {
+	return u.stageExecutions
 }
 
 func (u *unitOfWork) Commit() error {

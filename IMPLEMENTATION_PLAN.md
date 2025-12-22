@@ -565,3 +565,98 @@ func TestCreateWorkPlanFlow(t *testing.T) {
 | SQLite concurrency limits | Use WAL mode, serialize writes, document limitations |
 | Proto compatibility issues | Keep protos simple, avoid oneofs initially |
 | State machine edge cases | Comprehensive state transition matrix tests |
+
+---
+
+## Phase 9: Push-Based Execution (Implemented)
+
+This phase converts the system from in-process execution to push-based dispatch with registered stage runners.
+
+### 9.1 Domain Models
+
+**`internal/domain/execution.go`**
+```go
+type ExecutionMode int
+const (
+    ExecutionModeSync  ExecutionMode = 1
+    ExecutionModeAsync ExecutionMode = 2
+)
+
+type ExecutionState int
+const (
+    ExecutionStatePending    ExecutionState = 10
+    ExecutionStateDispatched ExecutionState = 20
+    ExecutionStateRunning    ExecutionState = 30
+    ExecutionStateComplete   ExecutionState = 40
+    ExecutionStateFailed     ExecutionState = 50
+)
+
+type StageExecution struct {
+    ID, WorkPlanID, StageID string
+    AttemptIdx int
+    RunnerType string
+    ExecutionMode ExecutionMode
+    State ExecutionState
+    RunnerID string
+    DispatchedAt, StartedAt, CompletedAt *time.Time
+    // ... progress, error, retry fields
+}
+```
+
+**`internal/domain/runner.go`**
+```go
+type StageRunner struct {
+    ID, RegistrationID, RunnerType, Address string
+    SupportedModes []ExecutionMode
+    MaxConcurrent, CurrentLoad int
+    Metadata map[string]string
+    ExpiresAt time.Time
+}
+```
+
+### 9.2 Storage Layer Updates
+
+**New tables:**
+- `stage_runners` - Runner registrations with TTL
+- `stage_executions` - Execution queue
+
+**New repositories:**
+- `StageRunnerRepository` - CRUD + load tracking
+- `StageExecutionRepository` - Queue operations
+
+### 9.3 Service Layer
+
+**`internal/service/runner.go`**
+- `RegisterRunner()` - Creates registration with TTL
+- `UnregisterRunner()` - Explicit unregistration
+- `ListRunners()` - Query active runners
+- `SelectRunner()` - Pick least-loaded runner for dispatch
+
+**`internal/service/dispatcher.go`**
+- Background goroutine polling for pending executions
+- Dispatches to runners via gRPC client calls
+- Handles sync (blocks) and async (callbacks) modes
+- Cleanup loops for expired registrations and stale executions
+
+**`internal/service/callback.go`**
+- `UpdateExecution()` - Progress updates from async runners
+- `CompleteExecution()` - Final completion with check updates
+
+### 9.4 Testing
+
+**`testing/e2e/`** - Comprehensive E2E test suite:
+- `helpers_test.go` - TestEnv and MockRunner infrastructure
+- `basic_test.go` - Sync/async execution basics
+- `runner_test.go` - Runner registration lifecycle
+- `workflow_test.go` - Complex dependency patterns
+- `error_test.go` - Error handling scenarios
+
+22 E2E tests covering the complete execution pipeline.
+
+### 9.5 Key Design Decisions
+
+1. **SQLite execution queue**: Durable across restarts
+2. **Dispatcher as in-process goroutine**: Polls for pending work
+3. **Registration with TTL**: Runners must heartbeat
+4. **Dual execution modes**: Stage specifies sync or async
+5. **Least-loaded selection**: Dispatcher picks runner with lowest load

@@ -9,6 +9,8 @@ package turbocipb
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	structpb "google.golang.org/protobuf/types/known/structpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -295,12 +297,701 @@ func (x *QueryNodesResponse) GetStages() []*Stage {
 	return nil
 }
 
+// RegisterStageRunnerRequest registers a stage runner with the orchestrator.
+type RegisterStageRunnerRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Unique identifier for this runner instance
+	RunnerId string `protobuf:"bytes,1,opt,name=runner_id,json=runnerId,proto3" json:"runner_id,omitempty"`
+	// Type of stages this runner handles (e.g., "build_executor", "test_executor")
+	RunnerType string `protobuf:"bytes,2,opt,name=runner_type,json=runnerType,proto3" json:"runner_type,omitempty"`
+	// gRPC endpoint address (e.g., "localhost:50052")
+	Address string `protobuf:"bytes,3,opt,name=address,proto3" json:"address,omitempty"`
+	// Supported execution modes
+	SupportedModes []ExecutionMode `protobuf:"varint,4,rep,packed,name=supported_modes,json=supportedModes,proto3,enum=turboci.v1.ExecutionMode" json:"supported_modes,omitempty"`
+	// Maximum concurrent executions (0 = unlimited)
+	MaxConcurrent int32 `protobuf:"varint,5,opt,name=max_concurrent,json=maxConcurrent,proto3" json:"max_concurrent,omitempty"`
+	// TTL for registration in seconds (auto-unregister after this duration without heartbeat)
+	TtlSeconds int64 `protobuf:"varint,6,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	// Optional metadata
+	Metadata      map[string]string `protobuf:"bytes,7,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterStageRunnerRequest) Reset() {
+	*x = RegisterStageRunnerRequest{}
+	mi := &file_turboci_v1_service_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterStageRunnerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterStageRunnerRequest) ProtoMessage() {}
+
+func (x *RegisterStageRunnerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterStageRunnerRequest.ProtoReflect.Descriptor instead.
+func (*RegisterStageRunnerRequest) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *RegisterStageRunnerRequest) GetRunnerId() string {
+	if x != nil {
+		return x.RunnerId
+	}
+	return ""
+}
+
+func (x *RegisterStageRunnerRequest) GetRunnerType() string {
+	if x != nil {
+		return x.RunnerType
+	}
+	return ""
+}
+
+func (x *RegisterStageRunnerRequest) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+func (x *RegisterStageRunnerRequest) GetSupportedModes() []ExecutionMode {
+	if x != nil {
+		return x.SupportedModes
+	}
+	return nil
+}
+
+func (x *RegisterStageRunnerRequest) GetMaxConcurrent() int32 {
+	if x != nil {
+		return x.MaxConcurrent
+	}
+	return 0
+}
+
+func (x *RegisterStageRunnerRequest) GetTtlSeconds() int64 {
+	if x != nil {
+		return x.TtlSeconds
+	}
+	return 0
+}
+
+func (x *RegisterStageRunnerRequest) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+// RegisterStageRunnerResponse returns the registration info.
+type RegisterStageRunnerResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Registration ID for renewal/unregistration
+	RegistrationId string `protobuf:"bytes,1,opt,name=registration_id,json=registrationId,proto3" json:"registration_id,omitempty"`
+	// When the registration expires (must renew before this)
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterStageRunnerResponse) Reset() {
+	*x = RegisterStageRunnerResponse{}
+	mi := &file_turboci_v1_service_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterStageRunnerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterStageRunnerResponse) ProtoMessage() {}
+
+func (x *RegisterStageRunnerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterStageRunnerResponse.ProtoReflect.Descriptor instead.
+func (*RegisterStageRunnerResponse) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *RegisterStageRunnerResponse) GetRegistrationId() string {
+	if x != nil {
+		return x.RegistrationId
+	}
+	return ""
+}
+
+func (x *RegisterStageRunnerResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+// UnregisterStageRunnerRequest removes a runner registration.
+type UnregisterStageRunnerRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	RegistrationId string                 `protobuf:"bytes,1,opt,name=registration_id,json=registrationId,proto3" json:"registration_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *UnregisterStageRunnerRequest) Reset() {
+	*x = UnregisterStageRunnerRequest{}
+	mi := &file_turboci_v1_service_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnregisterStageRunnerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnregisterStageRunnerRequest) ProtoMessage() {}
+
+func (x *UnregisterStageRunnerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnregisterStageRunnerRequest.ProtoReflect.Descriptor instead.
+func (*UnregisterStageRunnerRequest) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *UnregisterStageRunnerRequest) GetRegistrationId() string {
+	if x != nil {
+		return x.RegistrationId
+	}
+	return ""
+}
+
+// UnregisterStageRunnerResponse is empty on success.
+type UnregisterStageRunnerResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnregisterStageRunnerResponse) Reset() {
+	*x = UnregisterStageRunnerResponse{}
+	mi := &file_turboci_v1_service_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnregisterStageRunnerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnregisterStageRunnerResponse) ProtoMessage() {}
+
+func (x *UnregisterStageRunnerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnregisterStageRunnerResponse.ProtoReflect.Descriptor instead.
+func (*UnregisterStageRunnerResponse) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{7}
+}
+
+// ListStageRunnersRequest lists registered runners.
+type ListStageRunnersRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Optional filter by runner type
+	RunnerType    string `protobuf:"bytes,1,opt,name=runner_type,json=runnerType,proto3" json:"runner_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListStageRunnersRequest) Reset() {
+	*x = ListStageRunnersRequest{}
+	mi := &file_turboci_v1_service_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListStageRunnersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListStageRunnersRequest) ProtoMessage() {}
+
+func (x *ListStageRunnersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListStageRunnersRequest.ProtoReflect.Descriptor instead.
+func (*ListStageRunnersRequest) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ListStageRunnersRequest) GetRunnerType() string {
+	if x != nil {
+		return x.RunnerType
+	}
+	return ""
+}
+
+// ListStageRunnersResponse returns registered runners.
+type ListStageRunnersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Runners       []*StageRunnerInfo     `protobuf:"bytes,1,rep,name=runners,proto3" json:"runners,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListStageRunnersResponse) Reset() {
+	*x = ListStageRunnersResponse{}
+	mi := &file_turboci_v1_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListStageRunnersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListStageRunnersResponse) ProtoMessage() {}
+
+func (x *ListStageRunnersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListStageRunnersResponse.ProtoReflect.Descriptor instead.
+func (*ListStageRunnersResponse) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ListStageRunnersResponse) GetRunners() []*StageRunnerInfo {
+	if x != nil {
+		return x.Runners
+	}
+	return nil
+}
+
+// StageRunnerInfo describes a registered stage runner.
+type StageRunnerInfo struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	RunnerId       string                 `protobuf:"bytes,1,opt,name=runner_id,json=runnerId,proto3" json:"runner_id,omitempty"`
+	RegistrationId string                 `protobuf:"bytes,2,opt,name=registration_id,json=registrationId,proto3" json:"registration_id,omitempty"`
+	RunnerType     string                 `protobuf:"bytes,3,opt,name=runner_type,json=runnerType,proto3" json:"runner_type,omitempty"`
+	Address        string                 `protobuf:"bytes,4,opt,name=address,proto3" json:"address,omitempty"`
+	SupportedModes []ExecutionMode        `protobuf:"varint,5,rep,packed,name=supported_modes,json=supportedModes,proto3,enum=turboci.v1.ExecutionMode" json:"supported_modes,omitempty"`
+	MaxConcurrent  int32                  `protobuf:"varint,6,opt,name=max_concurrent,json=maxConcurrent,proto3" json:"max_concurrent,omitempty"`
+	CurrentLoad    int32                  `protobuf:"varint,7,opt,name=current_load,json=currentLoad,proto3" json:"current_load,omitempty"`
+	RegisteredAt   *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=registered_at,json=registeredAt,proto3" json:"registered_at,omitempty"`
+	LastHeartbeat  *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_heartbeat,json=lastHeartbeat,proto3" json:"last_heartbeat,omitempty"`
+	ExpiresAt      *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	Metadata       map[string]string      `protobuf:"bytes,11,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *StageRunnerInfo) Reset() {
+	*x = StageRunnerInfo{}
+	mi := &file_turboci_v1_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StageRunnerInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StageRunnerInfo) ProtoMessage() {}
+
+func (x *StageRunnerInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StageRunnerInfo.ProtoReflect.Descriptor instead.
+func (*StageRunnerInfo) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *StageRunnerInfo) GetRunnerId() string {
+	if x != nil {
+		return x.RunnerId
+	}
+	return ""
+}
+
+func (x *StageRunnerInfo) GetRegistrationId() string {
+	if x != nil {
+		return x.RegistrationId
+	}
+	return ""
+}
+
+func (x *StageRunnerInfo) GetRunnerType() string {
+	if x != nil {
+		return x.RunnerType
+	}
+	return ""
+}
+
+func (x *StageRunnerInfo) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+func (x *StageRunnerInfo) GetSupportedModes() []ExecutionMode {
+	if x != nil {
+		return x.SupportedModes
+	}
+	return nil
+}
+
+func (x *StageRunnerInfo) GetMaxConcurrent() int32 {
+	if x != nil {
+		return x.MaxConcurrent
+	}
+	return 0
+}
+
+func (x *StageRunnerInfo) GetCurrentLoad() int32 {
+	if x != nil {
+		return x.CurrentLoad
+	}
+	return 0
+}
+
+func (x *StageRunnerInfo) GetRegisteredAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RegisteredAt
+	}
+	return nil
+}
+
+func (x *StageRunnerInfo) GetLastHeartbeat() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastHeartbeat
+	}
+	return nil
+}
+
+func (x *StageRunnerInfo) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *StageRunnerInfo) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+// UpdateStageExecutionRequest reports progress on an async execution.
+type UpdateStageExecutionRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	ExecutionId string                 `protobuf:"bytes,1,opt,name=execution_id,json=executionId,proto3" json:"execution_id,omitempty"`
+	// Progress message
+	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	// Optional progress percentage (0-100)
+	ProgressPercent int32 `protobuf:"varint,3,opt,name=progress_percent,json=progressPercent,proto3" json:"progress_percent,omitempty"`
+	// Optional details
+	Details       *structpb.Struct `protobuf:"bytes,4,opt,name=details,proto3" json:"details,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateStageExecutionRequest) Reset() {
+	*x = UpdateStageExecutionRequest{}
+	mi := &file_turboci_v1_service_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateStageExecutionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateStageExecutionRequest) ProtoMessage() {}
+
+func (x *UpdateStageExecutionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateStageExecutionRequest.ProtoReflect.Descriptor instead.
+func (*UpdateStageExecutionRequest) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *UpdateStageExecutionRequest) GetExecutionId() string {
+	if x != nil {
+		return x.ExecutionId
+	}
+	return ""
+}
+
+func (x *UpdateStageExecutionRequest) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *UpdateStageExecutionRequest) GetProgressPercent() int32 {
+	if x != nil {
+		return x.ProgressPercent
+	}
+	return 0
+}
+
+func (x *UpdateStageExecutionRequest) GetDetails() *structpb.Struct {
+	if x != nil {
+		return x.Details
+	}
+	return nil
+}
+
+// UpdateStageExecutionResponse is empty on success.
+type UpdateStageExecutionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateStageExecutionResponse) Reset() {
+	*x = UpdateStageExecutionResponse{}
+	mi := &file_turboci_v1_service_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateStageExecutionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateStageExecutionResponse) ProtoMessage() {}
+
+func (x *UpdateStageExecutionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateStageExecutionResponse.ProtoReflect.Descriptor instead.
+func (*UpdateStageExecutionResponse) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{12}
+}
+
+// CompleteStageExecutionRequest reports completion of an async execution.
+type CompleteStageExecutionRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	ExecutionId string                 `protobuf:"bytes,1,opt,name=execution_id,json=executionId,proto3" json:"execution_id,omitempty"`
+	// Final stage state
+	StageState StageState `protobuf:"varint,2,opt,name=stage_state,json=stageState,proto3,enum=turboci.v1.StageState" json:"stage_state,omitempty"`
+	// Check updates
+	CheckUpdates []*CheckUpdate `protobuf:"bytes,3,rep,name=check_updates,json=checkUpdates,proto3" json:"check_updates,omitempty"`
+	// Failure if execution failed
+	Failure *Failure `protobuf:"bytes,4,opt,name=failure,proto3" json:"failure,omitempty"`
+	// Execution details
+	Details       *structpb.Struct `protobuf:"bytes,5,opt,name=details,proto3" json:"details,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CompleteStageExecutionRequest) Reset() {
+	*x = CompleteStageExecutionRequest{}
+	mi := &file_turboci_v1_service_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CompleteStageExecutionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CompleteStageExecutionRequest) ProtoMessage() {}
+
+func (x *CompleteStageExecutionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CompleteStageExecutionRequest.ProtoReflect.Descriptor instead.
+func (*CompleteStageExecutionRequest) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *CompleteStageExecutionRequest) GetExecutionId() string {
+	if x != nil {
+		return x.ExecutionId
+	}
+	return ""
+}
+
+func (x *CompleteStageExecutionRequest) GetStageState() StageState {
+	if x != nil {
+		return x.StageState
+	}
+	return StageState_STAGE_STATE_UNKNOWN
+}
+
+func (x *CompleteStageExecutionRequest) GetCheckUpdates() []*CheckUpdate {
+	if x != nil {
+		return x.CheckUpdates
+	}
+	return nil
+}
+
+func (x *CompleteStageExecutionRequest) GetFailure() *Failure {
+	if x != nil {
+		return x.Failure
+	}
+	return nil
+}
+
+func (x *CompleteStageExecutionRequest) GetDetails() *structpb.Struct {
+	if x != nil {
+		return x.Details
+	}
+	return nil
+}
+
+// CompleteStageExecutionResponse confirms completion was processed.
+type CompleteStageExecutionResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Acknowledgment
+	Acknowledged  bool `protobuf:"varint,1,opt,name=acknowledged,proto3" json:"acknowledged,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CompleteStageExecutionResponse) Reset() {
+	*x = CompleteStageExecutionResponse{}
+	mi := &file_turboci_v1_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CompleteStageExecutionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CompleteStageExecutionResponse) ProtoMessage() {}
+
+func (x *CompleteStageExecutionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CompleteStageExecutionResponse.ProtoReflect.Descriptor instead.
+func (*CompleteStageExecutionResponse) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *CompleteStageExecutionResponse) GetAcknowledged() bool {
+	if x != nil {
+		return x.Acknowledged
+	}
+	return false
+}
+
 var File_turboci_v1_service_proto protoreflect.FileDescriptor
 
 const file_turboci_v1_service_proto_rawDesc = "" +
 	"\n" +
 	"\x18turboci/v1/service.proto\x12\n" +
-	"turboci.v1\x1a\x19turboci/v1/workplan.proto\x1a\x16turboci/v1/check.proto\x1a\x16turboci/v1/stage.proto\x1a\x17turboci/v1/common.proto\"\x95\x01\n" +
+	"turboci.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x19turboci/v1/workplan.proto\x1a\x16turboci/v1/check.proto\x1a\x16turboci/v1/stage.proto\x1a\x17turboci/v1/common.proto\x1a\x1cturboci/v1/stagerunner.proto\"\x95\x01\n" +
 	"\x11WriteNodesRequest\x12 \n" +
 	"\fwork_plan_id\x18\x01 \x01(\tR\n" +
 	"workPlanId\x12.\n" +
@@ -320,14 +1011,77 @@ const file_turboci_v1_service_proto_rawDesc = "" +
 	"\x0einclude_stages\x18\a \x01(\bR\rincludeStages\"j\n" +
 	"\x12QueryNodesResponse\x12)\n" +
 	"\x06checks\x18\x01 \x03(\v2\x11.turboci.v1.CheckR\x06checks\x12)\n" +
-	"\x06stages\x18\x02 \x03(\v2\x11.turboci.v1.StageR\x06stages2\xd8\x02\n" +
+	"\x06stages\x18\x02 \x03(\v2\x11.turboci.v1.StageR\x06stages\"\x8f\x03\n" +
+	"\x1aRegisterStageRunnerRequest\x12\x1b\n" +
+	"\trunner_id\x18\x01 \x01(\tR\brunnerId\x12\x1f\n" +
+	"\vrunner_type\x18\x02 \x01(\tR\n" +
+	"runnerType\x12\x18\n" +
+	"\aaddress\x18\x03 \x01(\tR\aaddress\x12B\n" +
+	"\x0fsupported_modes\x18\x04 \x03(\x0e2\x19.turboci.v1.ExecutionModeR\x0esupportedModes\x12%\n" +
+	"\x0emax_concurrent\x18\x05 \x01(\x05R\rmaxConcurrent\x12\x1f\n" +
+	"\vttl_seconds\x18\x06 \x01(\x03R\n" +
+	"ttlSeconds\x12P\n" +
+	"\bmetadata\x18\a \x03(\v24.turboci.v1.RegisterStageRunnerRequest.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x81\x01\n" +
+	"\x1bRegisterStageRunnerResponse\x12'\n" +
+	"\x0fregistration_id\x18\x01 \x01(\tR\x0eregistrationId\x129\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"G\n" +
+	"\x1cUnregisterStageRunnerRequest\x12'\n" +
+	"\x0fregistration_id\x18\x01 \x01(\tR\x0eregistrationId\"\x1f\n" +
+	"\x1dUnregisterStageRunnerResponse\":\n" +
+	"\x17ListStageRunnersRequest\x12\x1f\n" +
+	"\vrunner_type\x18\x01 \x01(\tR\n" +
+	"runnerType\"Q\n" +
+	"\x18ListStageRunnersResponse\x125\n" +
+	"\arunners\x18\x01 \x03(\v2\x1b.turboci.v1.StageRunnerInfoR\arunners\"\xe3\x04\n" +
+	"\x0fStageRunnerInfo\x12\x1b\n" +
+	"\trunner_id\x18\x01 \x01(\tR\brunnerId\x12'\n" +
+	"\x0fregistration_id\x18\x02 \x01(\tR\x0eregistrationId\x12\x1f\n" +
+	"\vrunner_type\x18\x03 \x01(\tR\n" +
+	"runnerType\x12\x18\n" +
+	"\aaddress\x18\x04 \x01(\tR\aaddress\x12B\n" +
+	"\x0fsupported_modes\x18\x05 \x03(\x0e2\x19.turboci.v1.ExecutionModeR\x0esupportedModes\x12%\n" +
+	"\x0emax_concurrent\x18\x06 \x01(\x05R\rmaxConcurrent\x12!\n" +
+	"\fcurrent_load\x18\a \x01(\x05R\vcurrentLoad\x12?\n" +
+	"\rregistered_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\fregisteredAt\x12A\n" +
+	"\x0elast_heartbeat\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\rlastHeartbeat\x129\n" +
+	"\n" +
+	"expires_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12E\n" +
+	"\bmetadata\x18\v \x03(\v2).turboci.v1.StageRunnerInfo.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb8\x01\n" +
+	"\x1bUpdateStageExecutionRequest\x12!\n" +
+	"\fexecution_id\x18\x01 \x01(\tR\vexecutionId\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12)\n" +
+	"\x10progress_percent\x18\x03 \x01(\x05R\x0fprogressPercent\x121\n" +
+	"\adetails\x18\x04 \x01(\v2\x17.google.protobuf.StructR\adetails\"\x1e\n" +
+	"\x1cUpdateStageExecutionResponse\"\x9b\x02\n" +
+	"\x1dCompleteStageExecutionRequest\x12!\n" +
+	"\fexecution_id\x18\x01 \x01(\tR\vexecutionId\x127\n" +
+	"\vstage_state\x18\x02 \x01(\x0e2\x16.turboci.v1.StageStateR\n" +
+	"stageState\x12<\n" +
+	"\rcheck_updates\x18\x03 \x03(\v2\x17.turboci.v1.CheckUpdateR\fcheckUpdates\x12-\n" +
+	"\afailure\x18\x04 \x01(\v2\x13.turboci.v1.FailureR\afailure\x121\n" +
+	"\adetails\x18\x05 \x01(\v2\x17.google.protobuf.StructR\adetails\"D\n" +
+	"\x1eCompleteStageExecutionResponse\x12\"\n" +
+	"\facknowledged\x18\x01 \x01(\bR\facknowledged2\xe9\x06\n" +
 	"\x13TurboCIOrchestrator\x12W\n" +
 	"\x0eCreateWorkPlan\x12!.turboci.v1.CreateWorkPlanRequest\x1a\".turboci.v1.CreateWorkPlanResponse\x12N\n" +
 	"\vGetWorkPlan\x12\x1e.turboci.v1.GetWorkPlanRequest\x1a\x1f.turboci.v1.GetWorkPlanResponse\x12K\n" +
 	"\n" +
 	"WriteNodes\x12\x1d.turboci.v1.WriteNodesRequest\x1a\x1e.turboci.v1.WriteNodesResponse\x12K\n" +
 	"\n" +
-	"QueryNodes\x12\x1d.turboci.v1.QueryNodesRequest\x1a\x1e.turboci.v1.QueryNodesResponseB@Z>github.com/example/turboci-lite/gen/proto/turboci/v1;turbocipbb\x06proto3"
+	"QueryNodes\x12\x1d.turboci.v1.QueryNodesRequest\x1a\x1e.turboci.v1.QueryNodesResponse\x12f\n" +
+	"\x13RegisterStageRunner\x12&.turboci.v1.RegisterStageRunnerRequest\x1a'.turboci.v1.RegisterStageRunnerResponse\x12l\n" +
+	"\x15UnregisterStageRunner\x12(.turboci.v1.UnregisterStageRunnerRequest\x1a).turboci.v1.UnregisterStageRunnerResponse\x12]\n" +
+	"\x10ListStageRunners\x12#.turboci.v1.ListStageRunnersRequest\x1a$.turboci.v1.ListStageRunnersResponse\x12i\n" +
+	"\x14UpdateStageExecution\x12'.turboci.v1.UpdateStageExecutionRequest\x1a(.turboci.v1.UpdateStageExecutionResponse\x12o\n" +
+	"\x16CompleteStageExecution\x12).turboci.v1.CompleteStageExecutionRequest\x1a*.turboci.v1.CompleteStageExecutionResponseB:Z8github.com/example/turboci-lite/gen/turboci/v1;turbocipbb\x06proto3"
 
 var (
 	file_turboci_v1_service_proto_rawDescOnce sync.Once
@@ -341,45 +1095,87 @@ func file_turboci_v1_service_proto_rawDescGZIP() []byte {
 	return file_turboci_v1_service_proto_rawDescData
 }
 
-var file_turboci_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_turboci_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_turboci_v1_service_proto_goTypes = []any{
-	(*WriteNodesRequest)(nil),      // 0: turboci.v1.WriteNodesRequest
-	(*WriteNodesResponse)(nil),     // 1: turboci.v1.WriteNodesResponse
-	(*QueryNodesRequest)(nil),      // 2: turboci.v1.QueryNodesRequest
-	(*QueryNodesResponse)(nil),     // 3: turboci.v1.QueryNodesResponse
-	(*CheckWrite)(nil),             // 4: turboci.v1.CheckWrite
-	(*StageWrite)(nil),             // 5: turboci.v1.StageWrite
-	(*Check)(nil),                  // 6: turboci.v1.Check
-	(*Stage)(nil),                  // 7: turboci.v1.Stage
-	(CheckState)(0),                // 8: turboci.v1.CheckState
-	(StageState)(0),                // 9: turboci.v1.StageState
-	(*CreateWorkPlanRequest)(nil),  // 10: turboci.v1.CreateWorkPlanRequest
-	(*GetWorkPlanRequest)(nil),     // 11: turboci.v1.GetWorkPlanRequest
-	(*CreateWorkPlanResponse)(nil), // 12: turboci.v1.CreateWorkPlanResponse
-	(*GetWorkPlanResponse)(nil),    // 13: turboci.v1.GetWorkPlanResponse
+	(*WriteNodesRequest)(nil),              // 0: turboci.v1.WriteNodesRequest
+	(*WriteNodesResponse)(nil),             // 1: turboci.v1.WriteNodesResponse
+	(*QueryNodesRequest)(nil),              // 2: turboci.v1.QueryNodesRequest
+	(*QueryNodesResponse)(nil),             // 3: turboci.v1.QueryNodesResponse
+	(*RegisterStageRunnerRequest)(nil),     // 4: turboci.v1.RegisterStageRunnerRequest
+	(*RegisterStageRunnerResponse)(nil),    // 5: turboci.v1.RegisterStageRunnerResponse
+	(*UnregisterStageRunnerRequest)(nil),   // 6: turboci.v1.UnregisterStageRunnerRequest
+	(*UnregisterStageRunnerResponse)(nil),  // 7: turboci.v1.UnregisterStageRunnerResponse
+	(*ListStageRunnersRequest)(nil),        // 8: turboci.v1.ListStageRunnersRequest
+	(*ListStageRunnersResponse)(nil),       // 9: turboci.v1.ListStageRunnersResponse
+	(*StageRunnerInfo)(nil),                // 10: turboci.v1.StageRunnerInfo
+	(*UpdateStageExecutionRequest)(nil),    // 11: turboci.v1.UpdateStageExecutionRequest
+	(*UpdateStageExecutionResponse)(nil),   // 12: turboci.v1.UpdateStageExecutionResponse
+	(*CompleteStageExecutionRequest)(nil),  // 13: turboci.v1.CompleteStageExecutionRequest
+	(*CompleteStageExecutionResponse)(nil), // 14: turboci.v1.CompleteStageExecutionResponse
+	nil,                                    // 15: turboci.v1.RegisterStageRunnerRequest.MetadataEntry
+	nil,                                    // 16: turboci.v1.StageRunnerInfo.MetadataEntry
+	(*CheckWrite)(nil),                     // 17: turboci.v1.CheckWrite
+	(*StageWrite)(nil),                     // 18: turboci.v1.StageWrite
+	(*Check)(nil),                          // 19: turboci.v1.Check
+	(*Stage)(nil),                          // 20: turboci.v1.Stage
+	(CheckState)(0),                        // 21: turboci.v1.CheckState
+	(StageState)(0),                        // 22: turboci.v1.StageState
+	(ExecutionMode)(0),                     // 23: turboci.v1.ExecutionMode
+	(*timestamppb.Timestamp)(nil),          // 24: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),                // 25: google.protobuf.Struct
+	(*CheckUpdate)(nil),                    // 26: turboci.v1.CheckUpdate
+	(*Failure)(nil),                        // 27: turboci.v1.Failure
+	(*CreateWorkPlanRequest)(nil),          // 28: turboci.v1.CreateWorkPlanRequest
+	(*GetWorkPlanRequest)(nil),             // 29: turboci.v1.GetWorkPlanRequest
+	(*CreateWorkPlanResponse)(nil),         // 30: turboci.v1.CreateWorkPlanResponse
+	(*GetWorkPlanResponse)(nil),            // 31: turboci.v1.GetWorkPlanResponse
 }
 var file_turboci_v1_service_proto_depIdxs = []int32{
-	4,  // 0: turboci.v1.WriteNodesRequest.checks:type_name -> turboci.v1.CheckWrite
-	5,  // 1: turboci.v1.WriteNodesRequest.stages:type_name -> turboci.v1.StageWrite
-	6,  // 2: turboci.v1.WriteNodesResponse.checks:type_name -> turboci.v1.Check
-	7,  // 3: turboci.v1.WriteNodesResponse.stages:type_name -> turboci.v1.Stage
-	8,  // 4: turboci.v1.QueryNodesRequest.check_states:type_name -> turboci.v1.CheckState
-	9,  // 5: turboci.v1.QueryNodesRequest.stage_states:type_name -> turboci.v1.StageState
-	6,  // 6: turboci.v1.QueryNodesResponse.checks:type_name -> turboci.v1.Check
-	7,  // 7: turboci.v1.QueryNodesResponse.stages:type_name -> turboci.v1.Stage
-	10, // 8: turboci.v1.TurboCIOrchestrator.CreateWorkPlan:input_type -> turboci.v1.CreateWorkPlanRequest
-	11, // 9: turboci.v1.TurboCIOrchestrator.GetWorkPlan:input_type -> turboci.v1.GetWorkPlanRequest
-	0,  // 10: turboci.v1.TurboCIOrchestrator.WriteNodes:input_type -> turboci.v1.WriteNodesRequest
-	2,  // 11: turboci.v1.TurboCIOrchestrator.QueryNodes:input_type -> turboci.v1.QueryNodesRequest
-	12, // 12: turboci.v1.TurboCIOrchestrator.CreateWorkPlan:output_type -> turboci.v1.CreateWorkPlanResponse
-	13, // 13: turboci.v1.TurboCIOrchestrator.GetWorkPlan:output_type -> turboci.v1.GetWorkPlanResponse
-	1,  // 14: turboci.v1.TurboCIOrchestrator.WriteNodes:output_type -> turboci.v1.WriteNodesResponse
-	3,  // 15: turboci.v1.TurboCIOrchestrator.QueryNodes:output_type -> turboci.v1.QueryNodesResponse
-	12, // [12:16] is the sub-list for method output_type
-	8,  // [8:12] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	17, // 0: turboci.v1.WriteNodesRequest.checks:type_name -> turboci.v1.CheckWrite
+	18, // 1: turboci.v1.WriteNodesRequest.stages:type_name -> turboci.v1.StageWrite
+	19, // 2: turboci.v1.WriteNodesResponse.checks:type_name -> turboci.v1.Check
+	20, // 3: turboci.v1.WriteNodesResponse.stages:type_name -> turboci.v1.Stage
+	21, // 4: turboci.v1.QueryNodesRequest.check_states:type_name -> turboci.v1.CheckState
+	22, // 5: turboci.v1.QueryNodesRequest.stage_states:type_name -> turboci.v1.StageState
+	19, // 6: turboci.v1.QueryNodesResponse.checks:type_name -> turboci.v1.Check
+	20, // 7: turboci.v1.QueryNodesResponse.stages:type_name -> turboci.v1.Stage
+	23, // 8: turboci.v1.RegisterStageRunnerRequest.supported_modes:type_name -> turboci.v1.ExecutionMode
+	15, // 9: turboci.v1.RegisterStageRunnerRequest.metadata:type_name -> turboci.v1.RegisterStageRunnerRequest.MetadataEntry
+	24, // 10: turboci.v1.RegisterStageRunnerResponse.expires_at:type_name -> google.protobuf.Timestamp
+	10, // 11: turboci.v1.ListStageRunnersResponse.runners:type_name -> turboci.v1.StageRunnerInfo
+	23, // 12: turboci.v1.StageRunnerInfo.supported_modes:type_name -> turboci.v1.ExecutionMode
+	24, // 13: turboci.v1.StageRunnerInfo.registered_at:type_name -> google.protobuf.Timestamp
+	24, // 14: turboci.v1.StageRunnerInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
+	24, // 15: turboci.v1.StageRunnerInfo.expires_at:type_name -> google.protobuf.Timestamp
+	16, // 16: turboci.v1.StageRunnerInfo.metadata:type_name -> turboci.v1.StageRunnerInfo.MetadataEntry
+	25, // 17: turboci.v1.UpdateStageExecutionRequest.details:type_name -> google.protobuf.Struct
+	22, // 18: turboci.v1.CompleteStageExecutionRequest.stage_state:type_name -> turboci.v1.StageState
+	26, // 19: turboci.v1.CompleteStageExecutionRequest.check_updates:type_name -> turboci.v1.CheckUpdate
+	27, // 20: turboci.v1.CompleteStageExecutionRequest.failure:type_name -> turboci.v1.Failure
+	25, // 21: turboci.v1.CompleteStageExecutionRequest.details:type_name -> google.protobuf.Struct
+	28, // 22: turboci.v1.TurboCIOrchestrator.CreateWorkPlan:input_type -> turboci.v1.CreateWorkPlanRequest
+	29, // 23: turboci.v1.TurboCIOrchestrator.GetWorkPlan:input_type -> turboci.v1.GetWorkPlanRequest
+	0,  // 24: turboci.v1.TurboCIOrchestrator.WriteNodes:input_type -> turboci.v1.WriteNodesRequest
+	2,  // 25: turboci.v1.TurboCIOrchestrator.QueryNodes:input_type -> turboci.v1.QueryNodesRequest
+	4,  // 26: turboci.v1.TurboCIOrchestrator.RegisterStageRunner:input_type -> turboci.v1.RegisterStageRunnerRequest
+	6,  // 27: turboci.v1.TurboCIOrchestrator.UnregisterStageRunner:input_type -> turboci.v1.UnregisterStageRunnerRequest
+	8,  // 28: turboci.v1.TurboCIOrchestrator.ListStageRunners:input_type -> turboci.v1.ListStageRunnersRequest
+	11, // 29: turboci.v1.TurboCIOrchestrator.UpdateStageExecution:input_type -> turboci.v1.UpdateStageExecutionRequest
+	13, // 30: turboci.v1.TurboCIOrchestrator.CompleteStageExecution:input_type -> turboci.v1.CompleteStageExecutionRequest
+	30, // 31: turboci.v1.TurboCIOrchestrator.CreateWorkPlan:output_type -> turboci.v1.CreateWorkPlanResponse
+	31, // 32: turboci.v1.TurboCIOrchestrator.GetWorkPlan:output_type -> turboci.v1.GetWorkPlanResponse
+	1,  // 33: turboci.v1.TurboCIOrchestrator.WriteNodes:output_type -> turboci.v1.WriteNodesResponse
+	3,  // 34: turboci.v1.TurboCIOrchestrator.QueryNodes:output_type -> turboci.v1.QueryNodesResponse
+	5,  // 35: turboci.v1.TurboCIOrchestrator.RegisterStageRunner:output_type -> turboci.v1.RegisterStageRunnerResponse
+	7,  // 36: turboci.v1.TurboCIOrchestrator.UnregisterStageRunner:output_type -> turboci.v1.UnregisterStageRunnerResponse
+	9,  // 37: turboci.v1.TurboCIOrchestrator.ListStageRunners:output_type -> turboci.v1.ListStageRunnersResponse
+	12, // 38: turboci.v1.TurboCIOrchestrator.UpdateStageExecution:output_type -> turboci.v1.UpdateStageExecutionResponse
+	14, // 39: turboci.v1.TurboCIOrchestrator.CompleteStageExecution:output_type -> turboci.v1.CompleteStageExecutionResponse
+	31, // [31:40] is the sub-list for method output_type
+	22, // [22:31] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_turboci_v1_service_proto_init() }
@@ -391,13 +1187,14 @@ func file_turboci_v1_service_proto_init() {
 	file_turboci_v1_check_proto_init()
 	file_turboci_v1_stage_proto_init()
 	file_turboci_v1_common_proto_init()
+	file_turboci_v1_stagerunner_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_turboci_v1_service_proto_rawDesc), len(file_turboci_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

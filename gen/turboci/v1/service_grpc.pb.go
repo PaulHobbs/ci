@@ -19,10 +19,15 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	TurboCIOrchestrator_CreateWorkPlan_FullMethodName = "/turboci.v1.TurboCIOrchestrator/CreateWorkPlan"
-	TurboCIOrchestrator_GetWorkPlan_FullMethodName    = "/turboci.v1.TurboCIOrchestrator/GetWorkPlan"
-	TurboCIOrchestrator_WriteNodes_FullMethodName     = "/turboci.v1.TurboCIOrchestrator/WriteNodes"
-	TurboCIOrchestrator_QueryNodes_FullMethodName     = "/turboci.v1.TurboCIOrchestrator/QueryNodes"
+	TurboCIOrchestrator_CreateWorkPlan_FullMethodName         = "/turboci.v1.TurboCIOrchestrator/CreateWorkPlan"
+	TurboCIOrchestrator_GetWorkPlan_FullMethodName            = "/turboci.v1.TurboCIOrchestrator/GetWorkPlan"
+	TurboCIOrchestrator_WriteNodes_FullMethodName             = "/turboci.v1.TurboCIOrchestrator/WriteNodes"
+	TurboCIOrchestrator_QueryNodes_FullMethodName             = "/turboci.v1.TurboCIOrchestrator/QueryNodes"
+	TurboCIOrchestrator_RegisterStageRunner_FullMethodName    = "/turboci.v1.TurboCIOrchestrator/RegisterStageRunner"
+	TurboCIOrchestrator_UnregisterStageRunner_FullMethodName  = "/turboci.v1.TurboCIOrchestrator/UnregisterStageRunner"
+	TurboCIOrchestrator_ListStageRunners_FullMethodName       = "/turboci.v1.TurboCIOrchestrator/ListStageRunners"
+	TurboCIOrchestrator_UpdateStageExecution_FullMethodName   = "/turboci.v1.TurboCIOrchestrator/UpdateStageExecution"
+	TurboCIOrchestrator_CompleteStageExecution_FullMethodName = "/turboci.v1.TurboCIOrchestrator/CompleteStageExecution"
 )
 
 // TurboCIOrchestratorClient is the client API for TurboCIOrchestrator service.
@@ -39,6 +44,16 @@ type TurboCIOrchestratorClient interface {
 	WriteNodes(ctx context.Context, in *WriteNodesRequest, opts ...grpc.CallOption) (*WriteNodesResponse, error)
 	// QueryNodes queries nodes in the workflow graph.
 	QueryNodes(ctx context.Context, in *QueryNodesRequest, opts ...grpc.CallOption) (*QueryNodesResponse, error)
+	// RegisterStageRunner registers a stage runner with the orchestrator.
+	RegisterStageRunner(ctx context.Context, in *RegisterStageRunnerRequest, opts ...grpc.CallOption) (*RegisterStageRunnerResponse, error)
+	// UnregisterStageRunner removes a stage runner registration.
+	UnregisterStageRunner(ctx context.Context, in *UnregisterStageRunnerRequest, opts ...grpc.CallOption) (*UnregisterStageRunnerResponse, error)
+	// ListStageRunners returns all registered stage runners.
+	ListStageRunners(ctx context.Context, in *ListStageRunnersRequest, opts ...grpc.CallOption) (*ListStageRunnersResponse, error)
+	// UpdateStageExecution reports progress on an async execution.
+	UpdateStageExecution(ctx context.Context, in *UpdateStageExecutionRequest, opts ...grpc.CallOption) (*UpdateStageExecutionResponse, error)
+	// CompleteStageExecution reports completion of an async execution.
+	CompleteStageExecution(ctx context.Context, in *CompleteStageExecutionRequest, opts ...grpc.CallOption) (*CompleteStageExecutionResponse, error)
 }
 
 type turboCIOrchestratorClient struct {
@@ -89,6 +104,56 @@ func (c *turboCIOrchestratorClient) QueryNodes(ctx context.Context, in *QueryNod
 	return out, nil
 }
 
+func (c *turboCIOrchestratorClient) RegisterStageRunner(ctx context.Context, in *RegisterStageRunnerRequest, opts ...grpc.CallOption) (*RegisterStageRunnerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterStageRunnerResponse)
+	err := c.cc.Invoke(ctx, TurboCIOrchestrator_RegisterStageRunner_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *turboCIOrchestratorClient) UnregisterStageRunner(ctx context.Context, in *UnregisterStageRunnerRequest, opts ...grpc.CallOption) (*UnregisterStageRunnerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnregisterStageRunnerResponse)
+	err := c.cc.Invoke(ctx, TurboCIOrchestrator_UnregisterStageRunner_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *turboCIOrchestratorClient) ListStageRunners(ctx context.Context, in *ListStageRunnersRequest, opts ...grpc.CallOption) (*ListStageRunnersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListStageRunnersResponse)
+	err := c.cc.Invoke(ctx, TurboCIOrchestrator_ListStageRunners_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *turboCIOrchestratorClient) UpdateStageExecution(ctx context.Context, in *UpdateStageExecutionRequest, opts ...grpc.CallOption) (*UpdateStageExecutionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateStageExecutionResponse)
+	err := c.cc.Invoke(ctx, TurboCIOrchestrator_UpdateStageExecution_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *turboCIOrchestratorClient) CompleteStageExecution(ctx context.Context, in *CompleteStageExecutionRequest, opts ...grpc.CallOption) (*CompleteStageExecutionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CompleteStageExecutionResponse)
+	err := c.cc.Invoke(ctx, TurboCIOrchestrator_CompleteStageExecution_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TurboCIOrchestratorServer is the server API for TurboCIOrchestrator service.
 // All implementations must embed UnimplementedTurboCIOrchestratorServer
 // for forward compatibility.
@@ -103,6 +168,16 @@ type TurboCIOrchestratorServer interface {
 	WriteNodes(context.Context, *WriteNodesRequest) (*WriteNodesResponse, error)
 	// QueryNodes queries nodes in the workflow graph.
 	QueryNodes(context.Context, *QueryNodesRequest) (*QueryNodesResponse, error)
+	// RegisterStageRunner registers a stage runner with the orchestrator.
+	RegisterStageRunner(context.Context, *RegisterStageRunnerRequest) (*RegisterStageRunnerResponse, error)
+	// UnregisterStageRunner removes a stage runner registration.
+	UnregisterStageRunner(context.Context, *UnregisterStageRunnerRequest) (*UnregisterStageRunnerResponse, error)
+	// ListStageRunners returns all registered stage runners.
+	ListStageRunners(context.Context, *ListStageRunnersRequest) (*ListStageRunnersResponse, error)
+	// UpdateStageExecution reports progress on an async execution.
+	UpdateStageExecution(context.Context, *UpdateStageExecutionRequest) (*UpdateStageExecutionResponse, error)
+	// CompleteStageExecution reports completion of an async execution.
+	CompleteStageExecution(context.Context, *CompleteStageExecutionRequest) (*CompleteStageExecutionResponse, error)
 	mustEmbedUnimplementedTurboCIOrchestratorServer()
 }
 
@@ -124,6 +199,21 @@ func (UnimplementedTurboCIOrchestratorServer) WriteNodes(context.Context, *Write
 }
 func (UnimplementedTurboCIOrchestratorServer) QueryNodes(context.Context, *QueryNodesRequest) (*QueryNodesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method QueryNodes not implemented")
+}
+func (UnimplementedTurboCIOrchestratorServer) RegisterStageRunner(context.Context, *RegisterStageRunnerRequest) (*RegisterStageRunnerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RegisterStageRunner not implemented")
+}
+func (UnimplementedTurboCIOrchestratorServer) UnregisterStageRunner(context.Context, *UnregisterStageRunnerRequest) (*UnregisterStageRunnerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UnregisterStageRunner not implemented")
+}
+func (UnimplementedTurboCIOrchestratorServer) ListStageRunners(context.Context, *ListStageRunnersRequest) (*ListStageRunnersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListStageRunners not implemented")
+}
+func (UnimplementedTurboCIOrchestratorServer) UpdateStageExecution(context.Context, *UpdateStageExecutionRequest) (*UpdateStageExecutionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateStageExecution not implemented")
+}
+func (UnimplementedTurboCIOrchestratorServer) CompleteStageExecution(context.Context, *CompleteStageExecutionRequest) (*CompleteStageExecutionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CompleteStageExecution not implemented")
 }
 func (UnimplementedTurboCIOrchestratorServer) mustEmbedUnimplementedTurboCIOrchestratorServer() {}
 func (UnimplementedTurboCIOrchestratorServer) testEmbeddedByValue()                             {}
@@ -218,6 +308,96 @@ func _TurboCIOrchestrator_QueryNodes_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TurboCIOrchestrator_RegisterStageRunner_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterStageRunnerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TurboCIOrchestratorServer).RegisterStageRunner(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TurboCIOrchestrator_RegisterStageRunner_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TurboCIOrchestratorServer).RegisterStageRunner(ctx, req.(*RegisterStageRunnerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TurboCIOrchestrator_UnregisterStageRunner_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnregisterStageRunnerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TurboCIOrchestratorServer).UnregisterStageRunner(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TurboCIOrchestrator_UnregisterStageRunner_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TurboCIOrchestratorServer).UnregisterStageRunner(ctx, req.(*UnregisterStageRunnerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TurboCIOrchestrator_ListStageRunners_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListStageRunnersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TurboCIOrchestratorServer).ListStageRunners(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TurboCIOrchestrator_ListStageRunners_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TurboCIOrchestratorServer).ListStageRunners(ctx, req.(*ListStageRunnersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TurboCIOrchestrator_UpdateStageExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateStageExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TurboCIOrchestratorServer).UpdateStageExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TurboCIOrchestrator_UpdateStageExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TurboCIOrchestratorServer).UpdateStageExecution(ctx, req.(*UpdateStageExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TurboCIOrchestrator_CompleteStageExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompleteStageExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TurboCIOrchestratorServer).CompleteStageExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TurboCIOrchestrator_CompleteStageExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TurboCIOrchestratorServer).CompleteStageExecution(ctx, req.(*CompleteStageExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // TurboCIOrchestrator_ServiceDesc is the grpc.ServiceDesc for TurboCIOrchestrator service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -240,6 +420,26 @@ var TurboCIOrchestrator_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "QueryNodes",
 			Handler:    _TurboCIOrchestrator_QueryNodes_Handler,
+		},
+		{
+			MethodName: "RegisterStageRunner",
+			Handler:    _TurboCIOrchestrator_RegisterStageRunner_Handler,
+		},
+		{
+			MethodName: "UnregisterStageRunner",
+			Handler:    _TurboCIOrchestrator_UnregisterStageRunner_Handler,
+		},
+		{
+			MethodName: "ListStageRunners",
+			Handler:    _TurboCIOrchestrator_ListStageRunners_Handler,
+		},
+		{
+			MethodName: "UpdateStageExecution",
+			Handler:    _TurboCIOrchestrator_UpdateStageExecution_Handler,
+		},
+		{
+			MethodName: "CompleteStageExecution",
+			Handler:    _TurboCIOrchestrator_CompleteStageExecution_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

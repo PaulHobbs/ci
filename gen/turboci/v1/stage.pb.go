@@ -39,10 +39,14 @@ type Stage struct {
 	// Check assignments (responsibilities)
 	Assignments []*Assignment `protobuf:"bytes,6,rep,name=assignments,proto3" json:"assignments,omitempty"`
 	// Dependencies on other checks/stages
-	Dependencies  *DependencyGroup       `protobuf:"bytes,7,opt,name=dependencies,proto3" json:"dependencies,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	Version       int64                  `protobuf:"varint,10,opt,name=version,proto3" json:"version,omitempty"`
+	Dependencies *DependencyGroup       `protobuf:"bytes,7,opt,name=dependencies,proto3" json:"dependencies,omitempty"`
+	CreatedAt    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Version      int64                  `protobuf:"varint,10,opt,name=version,proto3" json:"version,omitempty"`
+	// Execution mode (sync or async)
+	ExecutionMode ExecutionMode `protobuf:"varint,11,opt,name=execution_mode,json=executionMode,proto3,enum=turboci.v1.ExecutionMode" json:"execution_mode,omitempty"`
+	// Runner type that should handle this stage
+	RunnerType    string `protobuf:"bytes,12,opt,name=runner_type,json=runnerType,proto3" json:"runner_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -145,6 +149,20 @@ func (x *Stage) GetVersion() int64 {
 		return x.Version
 	}
 	return 0
+}
+
+func (x *Stage) GetExecutionMode() ExecutionMode {
+	if x != nil {
+		return x.ExecutionMode
+	}
+	return ExecutionMode_EXECUTION_MODE_UNKNOWN
+}
+
+func (x *Stage) GetRunnerType() string {
+	if x != nil {
+		return x.RunnerType
+	}
+	return ""
 }
 
 // Attempt represents a single execution attempt of a Stage.
@@ -383,8 +401,12 @@ type StageWrite struct {
 	Dependencies *DependencyGroup `protobuf:"bytes,5,opt,name=dependencies,proto3" json:"dependencies,omitempty"`
 	// Current attempt update (for updating attempt state/progress)
 	CurrentAttempt *AttemptWrite `protobuf:"bytes,6,opt,name=current_attempt,json=currentAttempt,proto3" json:"current_attempt,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Execution mode (sync or async)
+	ExecutionMode ExecutionMode `protobuf:"varint,7,opt,name=execution_mode,json=executionMode,proto3,enum=turboci.v1.ExecutionMode" json:"execution_mode,omitempty"`
+	// Runner type that should handle this stage
+	RunnerType    string `protobuf:"bytes,8,opt,name=runner_type,json=runnerType,proto3" json:"runner_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StageWrite) Reset() {
@@ -457,6 +479,20 @@ func (x *StageWrite) GetCurrentAttempt() *AttemptWrite {
 		return x.CurrentAttempt
 	}
 	return nil
+}
+
+func (x *StageWrite) GetExecutionMode() ExecutionMode {
+	if x != nil {
+		return x.ExecutionMode
+	}
+	return ExecutionMode_EXECUTION_MODE_UNKNOWN
+}
+
+func (x *StageWrite) GetRunnerType() string {
+	if x != nil {
+		return x.RunnerType
+	}
+	return ""
 }
 
 // AttemptWrite is used to update the current attempt.
@@ -546,7 +582,7 @@ var File_turboci_v1_stage_proto protoreflect.FileDescriptor
 const file_turboci_v1_stage_proto_rawDesc = "" +
 	"\n" +
 	"\x16turboci/v1/stage.proto\x12\n" +
-	"turboci.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17turboci/v1/common.proto\"\xd0\x03\n" +
+	"turboci.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17turboci/v1/common.proto\"\xb3\x04\n" +
 	"\x05Stage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12 \n" +
 	"\fwork_plan_id\x18\x02 \x01(\tR\n" +
@@ -561,7 +597,10 @@ const file_turboci_v1_stage_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x18\n" +
 	"\aversion\x18\n" +
-	" \x01(\x03R\aversion\"\xfb\x02\n" +
+	" \x01(\x03R\aversion\x12@\n" +
+	"\x0eexecution_mode\x18\v \x01(\x0e2\x19.turboci.v1.ExecutionModeR\rexecutionMode\x12\x1f\n" +
+	"\vrunner_type\x18\f \x01(\tR\n" +
+	"runnerType\"\xfb\x02\n" +
 	"\aAttempt\x12\x10\n" +
 	"\x03idx\x18\x01 \x01(\x05R\x03idx\x12.\n" +
 	"\x05state\x18\x02 \x01(\x0e2\x18.turboci.v1.AttemptStateR\x05state\x12\x1f\n" +
@@ -582,7 +621,7 @@ const file_turboci_v1_stage_proto_rawDesc = "" +
 	"Assignment\x12&\n" +
 	"\x0ftarget_check_id\x18\x01 \x01(\tR\rtargetCheckId\x125\n" +
 	"\n" +
-	"goal_state\x18\x02 \x01(\x0e2\x16.turboci.v1.CheckStateR\tgoalState\"\xb5\x02\n" +
+	"goal_state\x18\x02 \x01(\x0e2\x16.turboci.v1.CheckStateR\tgoalState\"\x98\x03\n" +
 	"\n" +
 	"StageWrite\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12,\n" +
@@ -590,14 +629,17 @@ const file_turboci_v1_stage_proto_rawDesc = "" +
 	"\x04args\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x04args\x128\n" +
 	"\vassignments\x18\x04 \x03(\v2\x16.turboci.v1.AssignmentR\vassignments\x12?\n" +
 	"\fdependencies\x18\x05 \x01(\v2\x1b.turboci.v1.DependencyGroupR\fdependencies\x12A\n" +
-	"\x0fcurrent_attempt\x18\x06 \x01(\v2\x18.turboci.v1.AttemptWriteR\x0ecurrentAttempt\"\xf8\x01\n" +
+	"\x0fcurrent_attempt\x18\x06 \x01(\v2\x18.turboci.v1.AttemptWriteR\x0ecurrentAttempt\x12@\n" +
+	"\x0eexecution_mode\x18\a \x01(\x0e2\x19.turboci.v1.ExecutionModeR\rexecutionMode\x12\x1f\n" +
+	"\vrunner_type\x18\b \x01(\tR\n" +
+	"runnerType\"\xf8\x01\n" +
 	"\fAttemptWrite\x12.\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x18.turboci.v1.AttemptStateR\x05state\x12\x1f\n" +
 	"\vprocess_uid\x18\x02 \x01(\tR\n" +
 	"processUid\x121\n" +
 	"\adetails\x18\x03 \x01(\v2\x17.google.protobuf.StructR\adetails\x125\n" +
 	"\bprogress\x18\x04 \x01(\v2\x19.turboci.v1.ProgressEntryR\bprogress\x12-\n" +
-	"\afailure\x18\x05 \x01(\v2\x13.turboci.v1.FailureR\afailureB@Z>github.com/example/turboci-lite/gen/proto/turboci/v1;turbocipbb\x06proto3"
+	"\afailure\x18\x05 \x01(\v2\x13.turboci.v1.FailureR\afailureB:Z8github.com/example/turboci-lite/gen/turboci/v1;turbocipbb\x06proto3"
 
 var (
 	file_turboci_v1_stage_proto_rawDescOnce sync.Once
@@ -623,9 +665,10 @@ var file_turboci_v1_stage_proto_goTypes = []any{
 	(*structpb.Struct)(nil),       // 7: google.protobuf.Struct
 	(*DependencyGroup)(nil),       // 8: turboci.v1.DependencyGroup
 	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
-	(AttemptState)(0),             // 10: turboci.v1.AttemptState
-	(*Failure)(nil),               // 11: turboci.v1.Failure
-	(CheckState)(0),               // 12: turboci.v1.CheckState
+	(ExecutionMode)(0),            // 10: turboci.v1.ExecutionMode
+	(AttemptState)(0),             // 11: turboci.v1.AttemptState
+	(*Failure)(nil),               // 12: turboci.v1.Failure
+	(CheckState)(0),               // 13: turboci.v1.CheckState
 }
 var file_turboci_v1_stage_proto_depIdxs = []int32{
 	6,  // 0: turboci.v1.Stage.state:type_name -> turboci.v1.StageState
@@ -635,29 +678,31 @@ var file_turboci_v1_stage_proto_depIdxs = []int32{
 	8,  // 4: turboci.v1.Stage.dependencies:type_name -> turboci.v1.DependencyGroup
 	9,  // 5: turboci.v1.Stage.created_at:type_name -> google.protobuf.Timestamp
 	9,  // 6: turboci.v1.Stage.updated_at:type_name -> google.protobuf.Timestamp
-	10, // 7: turboci.v1.Attempt.state:type_name -> turboci.v1.AttemptState
-	7,  // 8: turboci.v1.Attempt.details:type_name -> google.protobuf.Struct
-	2,  // 9: turboci.v1.Attempt.progress:type_name -> turboci.v1.ProgressEntry
-	9,  // 10: turboci.v1.Attempt.created_at:type_name -> google.protobuf.Timestamp
-	9,  // 11: turboci.v1.Attempt.updated_at:type_name -> google.protobuf.Timestamp
-	11, // 12: turboci.v1.Attempt.failure:type_name -> turboci.v1.Failure
-	9,  // 13: turboci.v1.ProgressEntry.timestamp:type_name -> google.protobuf.Timestamp
-	7,  // 14: turboci.v1.ProgressEntry.details:type_name -> google.protobuf.Struct
-	12, // 15: turboci.v1.Assignment.goal_state:type_name -> turboci.v1.CheckState
-	6,  // 16: turboci.v1.StageWrite.state:type_name -> turboci.v1.StageState
-	7,  // 17: turboci.v1.StageWrite.args:type_name -> google.protobuf.Struct
-	3,  // 18: turboci.v1.StageWrite.assignments:type_name -> turboci.v1.Assignment
-	8,  // 19: turboci.v1.StageWrite.dependencies:type_name -> turboci.v1.DependencyGroup
-	5,  // 20: turboci.v1.StageWrite.current_attempt:type_name -> turboci.v1.AttemptWrite
-	10, // 21: turboci.v1.AttemptWrite.state:type_name -> turboci.v1.AttemptState
-	7,  // 22: turboci.v1.AttemptWrite.details:type_name -> google.protobuf.Struct
-	2,  // 23: turboci.v1.AttemptWrite.progress:type_name -> turboci.v1.ProgressEntry
-	11, // 24: turboci.v1.AttemptWrite.failure:type_name -> turboci.v1.Failure
-	25, // [25:25] is the sub-list for method output_type
-	25, // [25:25] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	10, // 7: turboci.v1.Stage.execution_mode:type_name -> turboci.v1.ExecutionMode
+	11, // 8: turboci.v1.Attempt.state:type_name -> turboci.v1.AttemptState
+	7,  // 9: turboci.v1.Attempt.details:type_name -> google.protobuf.Struct
+	2,  // 10: turboci.v1.Attempt.progress:type_name -> turboci.v1.ProgressEntry
+	9,  // 11: turboci.v1.Attempt.created_at:type_name -> google.protobuf.Timestamp
+	9,  // 12: turboci.v1.Attempt.updated_at:type_name -> google.protobuf.Timestamp
+	12, // 13: turboci.v1.Attempt.failure:type_name -> turboci.v1.Failure
+	9,  // 14: turboci.v1.ProgressEntry.timestamp:type_name -> google.protobuf.Timestamp
+	7,  // 15: turboci.v1.ProgressEntry.details:type_name -> google.protobuf.Struct
+	13, // 16: turboci.v1.Assignment.goal_state:type_name -> turboci.v1.CheckState
+	6,  // 17: turboci.v1.StageWrite.state:type_name -> turboci.v1.StageState
+	7,  // 18: turboci.v1.StageWrite.args:type_name -> google.protobuf.Struct
+	3,  // 19: turboci.v1.StageWrite.assignments:type_name -> turboci.v1.Assignment
+	8,  // 20: turboci.v1.StageWrite.dependencies:type_name -> turboci.v1.DependencyGroup
+	5,  // 21: turboci.v1.StageWrite.current_attempt:type_name -> turboci.v1.AttemptWrite
+	10, // 22: turboci.v1.StageWrite.execution_mode:type_name -> turboci.v1.ExecutionMode
+	11, // 23: turboci.v1.AttemptWrite.state:type_name -> turboci.v1.AttemptState
+	7,  // 24: turboci.v1.AttemptWrite.details:type_name -> google.protobuf.Struct
+	2,  // 25: turboci.v1.AttemptWrite.progress:type_name -> turboci.v1.ProgressEntry
+	12, // 26: turboci.v1.AttemptWrite.failure:type_name -> turboci.v1.Failure
+	27, // [27:27] is the sub-list for method output_type
+	27, // [27:27] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_turboci_v1_stage_proto_init() }

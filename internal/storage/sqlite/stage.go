@@ -31,16 +31,16 @@ func (r *stageRepo) Create(ctx context.Context, stage *domain.Stage) error {
 	}
 
 	_, err = r.tx.ExecContext(ctx, `
-		INSERT INTO stages (id, work_plan_id, state, args_json, assignments_json, dependencies_json, created_at, updated_at, version)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO stages (id, work_plan_id, state, args_json, assignments_json, dependencies_json, execution_mode, runner_type, created_at, updated_at, version)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, stage.ID, stage.WorkPlanID, stage.State, string(argsJSON), string(assignmentsJSON), string(depsJSON),
-		stage.CreatedAt, stage.UpdatedAt, stage.Version)
+		stage.ExecutionMode, stage.RunnerType, stage.CreatedAt, stage.UpdatedAt, stage.Version)
 	return err
 }
 
 func (r *stageRepo) Get(ctx context.Context, workPlanID, stageID string) (*domain.Stage, error) {
 	row := r.tx.QueryRowContext(ctx, `
-		SELECT id, work_plan_id, state, args_json, assignments_json, dependencies_json, created_at, updated_at, version
+		SELECT id, work_plan_id, state, args_json, assignments_json, dependencies_json, execution_mode, runner_type, created_at, updated_at, version
 		FROM stages WHERE work_plan_id = ? AND id = ?
 	`, workPlanID, stageID)
 
@@ -65,12 +65,17 @@ func (r *stageRepo) Get(ctx context.Context, workPlanID, stageID string) (*domai
 func (r *stageRepo) scanStage(row *sql.Row) (*domain.Stage, error) {
 	stage := &domain.Stage{}
 	var argsJSON, assignmentsJSON, depsJSON string
+	var runnerType sql.NullString
 
 	err := row.Scan(&stage.ID, &stage.WorkPlanID, &stage.State,
-		&argsJSON, &assignmentsJSON, &depsJSON,
+		&argsJSON, &assignmentsJSON, &depsJSON, &stage.ExecutionMode, &runnerType,
 		&stage.CreatedAt, &stage.UpdatedAt, &stage.Version)
 	if err != nil {
 		return nil, err
+	}
+
+	if runnerType.Valid {
+		stage.RunnerType = runnerType.String
 	}
 
 	if argsJSON != "" {
@@ -173,10 +178,10 @@ func (r *stageRepo) Update(ctx context.Context, stage *domain.Stage) error {
 
 	result, err := r.tx.ExecContext(ctx, `
 		UPDATE stages
-		SET state = ?, args_json = ?, assignments_json = ?, dependencies_json = ?, updated_at = ?, version = version + 1
+		SET state = ?, args_json = ?, assignments_json = ?, dependencies_json = ?, execution_mode = ?, runner_type = ?, updated_at = ?, version = version + 1
 		WHERE work_plan_id = ? AND id = ? AND version = ?
 	`, stage.State, string(argsJSON), string(assignmentsJSON), string(depsJSON),
-		stage.UpdatedAt, stage.WorkPlanID, stage.ID, stage.Version)
+		stage.ExecutionMode, stage.RunnerType, stage.UpdatedAt, stage.WorkPlanID, stage.ID, stage.Version)
 	if err != nil {
 		return err
 	}
@@ -194,7 +199,7 @@ func (r *stageRepo) Update(ctx context.Context, stage *domain.Stage) error {
 }
 
 func (r *stageRepo) List(ctx context.Context, workPlanID string, opts storage.ListOptions) ([]*domain.Stage, error) {
-	query := `SELECT id, work_plan_id, state, args_json, assignments_json, dependencies_json, created_at, updated_at, version
+	query := `SELECT id, work_plan_id, state, args_json, assignments_json, dependencies_json, execution_mode, runner_type, created_at, updated_at, version
 		FROM stages WHERE work_plan_id = ?`
 	args := []any{workPlanID}
 
@@ -237,12 +242,17 @@ func (r *stageRepo) List(ctx context.Context, workPlanID string, opts storage.Li
 	for rows.Next() {
 		stage := &domain.Stage{}
 		var argsJSON, assignmentsJSON, depsJSON string
+		var runnerType sql.NullString
 
 		err := rows.Scan(&stage.ID, &stage.WorkPlanID, &stage.State,
-			&argsJSON, &assignmentsJSON, &depsJSON,
+			&argsJSON, &assignmentsJSON, &depsJSON, &stage.ExecutionMode, &runnerType,
 			&stage.CreatedAt, &stage.UpdatedAt, &stage.Version)
 		if err != nil {
 			return nil, err
+		}
+
+		if runnerType.Valid {
+			stage.RunnerType = runnerType.String
 		}
 
 		if argsJSON != "" {

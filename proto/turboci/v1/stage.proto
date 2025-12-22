@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package turboci.v1;
 
-option go_package = "github.com/example/turboci-lite/gen/proto/turboci/v1;turbocipb";
+option go_package = "github.com/example/turboci-lite/gen/turboci/v1;turbocipb";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
@@ -34,6 +34,12 @@ message Stage {
   google.protobuf.Timestamp created_at = 8;
   google.protobuf.Timestamp updated_at = 9;
   int64 version = 10;
+
+  // Execution mode (sync or async)
+  ExecutionMode execution_mode = 11;
+
+  // Runner type that should handle this stage
+  string runner_type = 12;
 }
 
 // Attempt represents a single execution attempt of a Stage.
@@ -92,6 +98,12 @@ message StageWrite {
 
   // Current attempt update (for updating attempt state/progress)
   AttemptWrite current_attempt = 6;
+
+  // Execution mode (sync or async)
+  ExecutionMode execution_mode = 7;
+
+  // Runner type that should handle this stage
+  string runner_type = 8;
 }
 
 // AttemptWrite is used to update the current attempt.

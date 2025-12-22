@@ -16,8 +16,9 @@ import (
 
 // Config holds the server configuration.
 type Config struct {
-	GRPCPort   int
-	SQLitePath string
+	GRPCPort        int
+	SQLitePath      string
+	CallbackAddress string
 }
 
 func main() {
@@ -38,21 +39,43 @@ func main() {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	// Create service
-	svc := service.NewOrchestrator(store)
+	// Create services
+	orchestratorSvc := service.NewOrchestrator(store)
+	runnerSvc := service.NewRunnerService(store)
+	callbackSvc := service.NewCallbackService(store, orchestratorSvc)
+
+	// Create dispatcher with configuration
+	dispatcherCfg := service.DefaultDispatcherConfig()
+	dispatcherCfg.CallbackAddress = cfg.CallbackAddress
+	dispatcher := service.NewDispatcher(store, runnerSvc, orchestratorSvc, dispatcherCfg)
 
 	// Create endpoints
-	endpoints := endpoint.MakeEndpoints(svc)
+	endpoints := endpoint.MakeEndpoints(orchestratorSvc)
 
-	// Create and start gRPC server
-	server := grpcTransport.NewServer(endpoints)
+	// Create gRPC server with services
+	server := grpcTransport.NewServer(
+		endpoints,
+		grpcTransport.WithRunnerService(runnerSvc),
+		grpcTransport.WithCallbackService(callbackSvc),
+	)
+
+	// Start dispatcher
+	log.Println("Starting dispatcher...")
+	dispatcher.Start()
 
 	// Handle graceful shutdown
 	go func() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
-		log.Println("Shutting down server...")
+		log.Println("Shutting down...")
+
+		// Stop dispatcher first
+		log.Println("Stopping dispatcher...")
+		dispatcher.Stop()
+
+		// Then stop gRPC server
+		log.Println("Stopping gRPC server...")
 		server.GracefulStop()
 	}()
 
@@ -66,8 +89,9 @@ func main() {
 
 func loadConfig() Config {
 	cfg := Config{
-		GRPCPort:   50051,
-		SQLitePath: "turboci.db",
+		GRPCPort:        50051,
+		SQLitePath:      "turboci.db",
+		CallbackAddress: "localhost:50051",
 	}
 
 	// Override from environment
@@ -79,6 +103,10 @@ func loadConfig() Config {
 
 	if path := os.Getenv("SQLITE_PATH"); path != "" {
 		cfg.SQLitePath = path
+	}
+
+	if addr := os.Getenv("CALLBACK_ADDRESS"); addr != "" {
+		cfg.CallbackAddress = addr
 	}
 
 	return cfg

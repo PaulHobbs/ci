@@ -98,6 +98,8 @@ type StageWrite struct {
 	Args           map[string]any
 	Assignments    []domain.Assignment
 	Dependencies   *domain.DependencyGroup
+	ExecutionMode  *domain.ExecutionMode // Sync or async execution
+	RunnerType     string                // Which runner type handles this stage
 	CurrentAttempt *AttemptWrite
 }
 
@@ -313,6 +315,14 @@ func (s *OrchestratorService) writeStage(ctx context.Context, uow storage.UnitOf
 	}
 	if sw.Dependencies != nil {
 		stage.Dependencies = sw.Dependencies
+		stageModified = true
+	}
+	if sw.ExecutionMode != nil {
+		stage.ExecutionMode = *sw.ExecutionMode
+		stageModified = true
+	}
+	if sw.RunnerType != "" {
+		stage.RunnerType = sw.RunnerType
 		stageModified = true
 	}
 

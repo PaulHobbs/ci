@@ -16,6 +16,26 @@ const (
 	StageStateFinal         StageState = 40 // Fully complete
 )
 
+// ExecutionMode specifies how a stage should be executed.
+type ExecutionMode int
+
+const (
+	ExecutionModeUnknown ExecutionMode = 0
+	ExecutionModeSync    ExecutionMode = 1 // Block until completion
+	ExecutionModeAsync   ExecutionMode = 2 // Return immediately, callback on completion
+)
+
+func (m ExecutionMode) String() string {
+	switch m {
+	case ExecutionModeSync:
+		return "SYNC"
+	case ExecutionModeAsync:
+		return "ASYNC"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 func (s StageState) String() string {
 	switch s {
 	case StageStatePlanned:
@@ -100,31 +120,34 @@ func ValidAttemptStateTransition(from, to AttemptState) bool {
 
 // Stage is an executable node in the workflow.
 type Stage struct {
-	ID           string
-	WorkPlanID   string
-	State        StageState
-	Args         map[string]any
-	Attempts     []Attempt
-	Assignments  []Assignment
-	Dependencies *DependencyGroup
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	Version      int64
+	ID            string
+	WorkPlanID    string
+	State         StageState
+	Args          map[string]any
+	Attempts      []Attempt
+	Assignments   []Assignment
+	Dependencies  *DependencyGroup
+	ExecutionMode ExecutionMode // Sync or async execution
+	RunnerType    string        // Which runner type handles this stage
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Version       int64
 }
 
 // NewStage creates a new Stage with the given ID.
 func NewStage(workPlanID, id string) *Stage {
 	now := time.Now().UTC()
 	return &Stage{
-		ID:          id,
-		WorkPlanID:  workPlanID,
-		State:       StageStatePlanned,
-		Args:        make(map[string]any),
-		Attempts:    nil,
-		Assignments: nil,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		Version:     1,
+		ID:            id,
+		WorkPlanID:    workPlanID,
+		State:         StageStatePlanned,
+		Args:          make(map[string]any),
+		Attempts:      nil,
+		Assignments:   nil,
+		ExecutionMode: ExecutionModeSync, // Default to sync execution
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		Version:       1,
 	}
 }
 
