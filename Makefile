@@ -1,4 +1,4 @@
-.PHONY: proto build test clean run
+.PHONY: proto build build-ci test clean run run-ci
 
 # Proto generation
 proto:
@@ -12,6 +12,16 @@ proto:
 # Build the server
 build:
 	go build -o bin/turboci-server ./cmd/server
+
+# Build CI tools
+build-ci: build
+	go build -o bin/ci ./cmd/ci
+	go build -o bin/trigger-runner ./cmd/ci/runners/trigger
+	go build -o bin/materialize-runner ./cmd/ci/runners/materialize
+	go build -o bin/builder-runner ./cmd/ci/runners/builder
+	go build -o bin/tester-runner ./cmd/ci/runners/tester
+	go build -o bin/conditional-runner ./cmd/ci/runners/conditional
+	go build -o bin/collector-runner ./cmd/ci/runners/collector
 
 # Run tests
 test:
@@ -31,6 +41,10 @@ clean:
 # Run the server
 run: build
 	./bin/turboci-server
+
+# Run CI (builds and tests this repo using turboci-lite)
+run-ci: build-ci
+	./bin/ci --verbose
 
 # Install protoc plugins
 install-tools:
