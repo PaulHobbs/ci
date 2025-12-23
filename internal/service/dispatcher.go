@@ -248,7 +248,7 @@ func (d *Dispatcher) processPendingExecutions(ctx context.Context) error {
 
 // dispatchForRunnerType dispatches pending executions for a specific runner type.
 func (d *Dispatcher) dispatchForRunnerType(ctx context.Context, runnerType string) error {
-	uow, err := d.storage.Begin(ctx)
+	uow, err := d.storage.BeginImmediate(ctx)
 	if err != nil {
 		return err
 	}
@@ -267,7 +267,7 @@ func (d *Dispatcher) dispatchForRunnerType(ctx context.Context, runnerType strin
 
 	for _, exec := range executions {
 		// Start a fresh transaction for each execution
-		uow, err = d.storage.Begin(ctx)
+		uow, err = d.storage.BeginImmediate(ctx)
 		if err != nil {
 			return err
 		}
@@ -359,8 +359,8 @@ func (d *Dispatcher) dispatchExecution(ctx context.Context, uow storage.UnitOfWo
 	return d.dispatchSync(ctx, uow, client, exec, stage.Args, checkOptions, deadline)
 }
 
-// dispatchSync dispatches a synchronous execution (blocks until complete).
-// Note: This commits the uow before calling the runner to avoid transaction conflicts.
+// dispatchSync dispatches a synchronous execution.
+// Note: This commits the uow immediately and runs the execution in a goroutine.
 func (d *Dispatcher) dispatchSync(ctx context.Context, uow storage.UnitOfWork, client StageRunnerClient, exec *domain.StageExecution, stageArgs map[string]any, checkOptions []*CheckOptions, deadline time.Time) error {
 	req := &RunRequest{
 		ExecutionID:    exec.ID,
@@ -374,74 +374,101 @@ func (d *Dispatcher) dispatchSync(ctx context.Context, uow storage.UnitOfWork, c
 		DeadlineMillis: deadline.UnixMilli(),
 	}
 
-	// Commit the transaction before making the blocking call.
+	// Commit the transaction before spawning the runner.
 	// This ensures that:
 	// 1. MarkDispatched and IncrementLoad are persisted
-	// 2. applyCheckUpdates (which starts a new transaction) won't conflict
 	if err := uow.Commit(); err != nil {
 		return err
 	}
 
-	// Create context with deadline
-	execCtx, cancel := context.WithDeadline(ctx, deadline)
-	defer cancel()
+	// Use WithoutCancel to preserve values (trace IDs, etc.) but detach from parent cancellation
+	// so the execution can complete even if the dispatcher loop context finishes.
+	detachedCtx := context.WithoutCancel(ctx)
 
-	resp, err := client.Run(execCtx, req)
+	// Run in background to avoid blocking the dispatcher loop
+	d.wg.Add(1)
+	go func() {
+		defer d.wg.Done()
 
-	// Start a new transaction for post-execution updates
-	postUow, uowErr := d.storage.Begin(ctx)
-	if uowErr != nil {
-		log.Printf("dispatcher: error starting post-execution transaction: %v", uowErr)
-		return uowErr
-	}
-	defer postUow.Rollback()
+		// Create context with deadline for the RPC call
+		execCtx, cancel := context.WithDeadline(detachedCtx, deadline)
+		defer cancel()
 
-	if err != nil {
-		// Mark execution as failed
-		if markErr := postUow.StageExecutions().MarkFailed(ctx, exec.ID, err.Error()); markErr != nil {
-			log.Printf("dispatcher: error marking execution failed: %v", markErr)
+		resp, err := client.Run(execCtx, req)
+
+		if err != nil {
+			// Start a transaction for handling failure
+			failUow, uowErr := d.storage.BeginImmediate(detachedCtx)
+			if uowErr != nil {
+				log.Printf("dispatcher: error starting failure transaction: %v", uowErr)
+				return
+			}
+			defer failUow.Rollback()
+
+			// Mark execution as failed
+			if markErr := failUow.StageExecutions().MarkFailed(detachedCtx, exec.ID, err.Error()); markErr != nil {
+				log.Printf("dispatcher: error marking execution failed: %v", markErr)
+			}
+			// Decrement runner load
+			if loadErr := failUow.StageRunners().DecrementLoad(detachedCtx, exec.RunnerID); loadErr != nil {
+				log.Printf("dispatcher: error decrementing load: %v", loadErr)
+			}
+			if err := failUow.Commit(); err != nil {
+				log.Printf("dispatcher: error committing failure transaction: %v", err)
+			}
+			return
 		}
+
+		// Apply check updates (this starts its own transaction via WriteNodes)
+		// We use detachedCtx here as well
+		if err := d.applyCheckUpdates(detachedCtx, exec.WorkPlanID, resp.CheckUpdates); err != nil {
+			log.Printf("dispatcher: error applying check updates: %v", err)
+		}
+
+		// Update stage state based on response
+		if resp.StageState != domain.StageStateUnknown {
+			if err := d.updateStageState(detachedCtx, exec.WorkPlanID, exec.StageID, resp.StageState); err != nil {
+				log.Printf("dispatcher: error updating stage state: %v", err)
+			}
+		}
+
+		// Start a transaction for final status update
+		postUow, uowErr := d.storage.BeginImmediate(detachedCtx)
+		if uowErr != nil {
+			log.Printf("dispatcher: error starting post-execution transaction: %v", uowErr)
+			return
+		}
+		defer postUow.Rollback()
+
+		// Mark execution complete or failed based on stage state and failure
+		if resp.Failure != nil {
+			if err := postUow.StageExecutions().MarkFailed(detachedCtx, exec.ID, resp.Failure.Message); err != nil {
+				log.Printf("dispatcher: error marking execution failed: %v", err)
+				return
+			}
+		} else if resp.StageState == domain.StageStateFinal || resp.StageState == domain.StageStateAwaitingGroup {
+			if err := postUow.StageExecutions().MarkComplete(detachedCtx, exec.ID); err != nil {
+				log.Printf("dispatcher: error marking execution complete: %v", err)
+				return
+			}
+		} else {
+			if err := postUow.StageExecutions().MarkFailed(detachedCtx, exec.ID, "unexpected stage state"); err != nil {
+				log.Printf("dispatcher: error marking execution failed (unexpected state): %v", err)
+				return
+			}
+		}
+
 		// Decrement runner load
-		if loadErr := postUow.StageRunners().DecrementLoad(ctx, exec.RunnerID); loadErr != nil {
-			log.Printf("dispatcher: error decrementing load: %v", loadErr)
+		if err := postUow.StageRunners().DecrementLoad(detachedCtx, exec.RunnerID); err != nil {
+			log.Printf("dispatcher: error decrementing load: %v", err)
 		}
-		postUow.Commit()
-		return err
-	}
 
-	// Apply check updates (this starts its own transaction via WriteNodes)
-	if err := d.applyCheckUpdates(ctx, exec.WorkPlanID, resp.CheckUpdates); err != nil {
-		log.Printf("dispatcher: error applying check updates: %v", err)
-	}
-
-	// Update stage state based on response
-	if resp.StageState != domain.StageStateUnknown {
-		if err := d.updateStageState(ctx, exec.WorkPlanID, exec.StageID, resp.StageState); err != nil {
-			log.Printf("dispatcher: error updating stage state: %v", err)
+		if err := postUow.Commit(); err != nil {
+			log.Printf("dispatcher: error committing post-execution transaction: %v", err)
 		}
-	}
+	}()
 
-	// Mark execution complete or failed based on stage state and failure
-	if resp.Failure != nil {
-		if err := postUow.StageExecutions().MarkFailed(ctx, exec.ID, resp.Failure.Message); err != nil {
-			return err
-		}
-	} else if resp.StageState == domain.StageStateFinal || resp.StageState == domain.StageStateAwaitingGroup {
-		if err := postUow.StageExecutions().MarkComplete(ctx, exec.ID); err != nil {
-			return err
-		}
-	} else {
-		if err := postUow.StageExecutions().MarkFailed(ctx, exec.ID, "unexpected stage state"); err != nil {
-			return err
-		}
-	}
-
-	// Decrement runner load
-	if err := postUow.StageRunners().DecrementLoad(ctx, exec.RunnerID); err != nil {
-		log.Printf("dispatcher: error decrementing load: %v", err)
-	}
-
-	return postUow.Commit()
+	return nil
 }
 
 // dispatchAsync dispatches an asynchronous execution (returns immediately).
@@ -518,7 +545,7 @@ func (d *Dispatcher) updateStageState(ctx context.Context, workPlanID, stageID s
 
 // handleStaleExecutions marks stale/timed-out executions as failed.
 func (d *Dispatcher) handleStaleExecutions(ctx context.Context) error {
-	uow, err := d.storage.Begin(ctx)
+	uow, err := d.storage.BeginImmediate(ctx)
 	if err != nil {
 		return err
 	}

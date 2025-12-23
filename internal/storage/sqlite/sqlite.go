@@ -60,6 +60,25 @@ func (s *SQLiteStorage) Begin(ctx context.Context) (storage.UnitOfWork, error) {
 	return newUnitOfWork(tx), nil
 }
 
+// BeginImmediate starts a new immediate transaction.
+// It emulates IMMEDIATE behavior by performing a write operation immediately.
+func (s *SQLiteStorage) BeginImmediate(ctx context.Context) (storage.UnitOfWork, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Force RESERVED lock by writing.
+	// This prevents the "upgrade deadlock" where multiple transactions read first
+	// (acquiring SHARED locks) and then try to write (needing RESERVED lock).
+	if _, err := tx.ExecContext(ctx, "UPDATE _lock SET id=id WHERE id=1"); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	return newUnitOfWork(tx), nil
+}
+
 // Close closes the database connection.
 func (s *SQLiteStorage) Close() error {
 	return s.db.Close()

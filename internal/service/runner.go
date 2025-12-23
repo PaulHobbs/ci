@@ -74,7 +74,7 @@ func (s *RunnerService) RegisterRunner(ctx context.Context, req *RegisterRunnerR
 		runner.Metadata = make(map[string]string)
 	}
 
-	uow, err := s.storage.Begin(ctx)
+	uow, err := s.storage.BeginImmediate(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func (s *RunnerService) UnregisterRunner(ctx context.Context, registrationID str
 		return domain.ErrInvalidArgument
 	}
 
-	uow, err := s.storage.Begin(ctx)
+	uow, err := s.storage.BeginImmediate(ctx)
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func (s *RunnerService) Heartbeat(ctx context.Context, registrationID string, tt
 		return domain.ErrInvalidArgument
 	}
 
-	uow, err := s.storage.Begin(ctx)
+	uow, err := s.storage.BeginImmediate(ctx)
 	if err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func (s *RunnerService) SelectRunner(ctx context.Context, runnerType string, mod
 
 // CleanupExpired removes expired runner registrations.
 func (s *RunnerService) CleanupExpired(ctx context.Context) (int, error) {
-	uow, err := s.storage.Begin(ctx)
+	uow, err := s.storage.BeginImmediate(ctx)
 	if err != nil {
 		return 0, err
 	}

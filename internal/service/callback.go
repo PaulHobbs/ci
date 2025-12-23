@@ -35,7 +35,7 @@ func (s *CallbackService) UpdateExecution(ctx context.Context, req *UpdateExecut
 		return domain.ErrInvalidArgument
 	}
 
-	uow, err := s.storage.Begin(ctx)
+	uow, err := s.storage.BeginImmediate(ctx)
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (s *CallbackService) CompleteExecution(ctx context.Context, req *CompleteEx
 		return domain.ErrInvalidArgument
 	}
 
-	uow, err := s.storage.Begin(ctx)
+	uow, err := s.storage.BeginImmediate(ctx)
 	if err != nil {
 		return err
 	}

@@ -151,6 +151,10 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_executions_pending ON stage_executions(state, runner_type)`,
 		`CREATE INDEX IF NOT EXISTS idx_executions_work_plan ON stage_executions(work_plan_id, stage_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_executions_runner ON stage_executions(runner_id)`,
+
+		// Lock table for emulating IMMEDIATE transactions
+		`CREATE TABLE IF NOT EXISTS _lock (id INTEGER PRIMARY KEY)`,
+		`INSERT OR IGNORE INTO _lock (id) VALUES (1)`,
 	}
 
 	for _, migration := range migrations {

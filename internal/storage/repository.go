@@ -197,6 +197,10 @@ type Storage interface {
 	// Begin starts a new transaction and returns a UnitOfWork.
 	Begin(ctx context.Context) (UnitOfWork, error)
 
+	// BeginImmediate starts a new immediate transaction and returns a UnitOfWork.
+	// This is preferred for read-write operations to avoid upgrade deadlocks in SQLite.
+	BeginImmediate(ctx context.Context) (UnitOfWork, error)
+
 	// Close closes the storage connection.
 	Close() error
 

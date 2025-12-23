@@ -32,7 +32,7 @@ func (s *OrchestratorService) CreateWorkPlan(ctx context.Context, req *CreateWor
 		wp.Metadata = req.Metadata
 	}
 
-	uow, err := s.storage.Begin(ctx)
+	uow, err := s.storage.BeginImmediate(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -120,7 +120,7 @@ type WriteNodesResponse struct {
 
 // WriteNodes atomically writes or updates multiple nodes within a WorkPlan.
 func (s *OrchestratorService) WriteNodes(ctx context.Context, req *WriteNodesRequest) (*WriteNodesResponse, error) {
-	uow, err := s.storage.Begin(ctx)
+	uow, err := s.storage.BeginImmediate(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
