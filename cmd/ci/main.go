@@ -196,7 +196,7 @@ func (c *CIController) startEmbeddedOrchestrator(ctx context.Context, port int, 
 
 	// Create dispatcher with faster polling for CI
 	dispatcherCfg := service.DefaultDispatcherConfig()
-	dispatcherCfg.PollInterval = 100 * time.Millisecond
+	dispatcherCfg.PollInterval = 50 * time.Millisecond
 	dispatcherCfg.CallbackAddress = fmt.Sprintf("localhost:%d", port)
 	dispatcher := service.NewDispatcher(store, runnerSvc, orchestratorSvc, dispatcherCfg)
 
@@ -222,16 +222,22 @@ func (c *CIController) startEmbeddedOrchestrator(ctx context.Context, port int, 
 		grpctransport.WithCallbackService(callbackSvc),
 	)
 
-	// Start server in background
+	// Start server in background with proper error handling
 	addr := fmt.Sprintf(":%d", port)
+	serverErrCh := make(chan error, 1)
 	go func() {
 		if err := server.Serve(addr); err != nil {
-			log.Printf("gRPC server error: %v", err)
+			serverErrCh <- err
 		}
 	}()
 
-	// Wait for server to start
-	time.Sleep(100 * time.Millisecond)
+	// Wait for server to start (or fail)
+	select {
+	case err := <-serverErrCh:
+		return fmt.Errorf("gRPC server failed to start: %w", err)
+	case <-time.After(200 * time.Millisecond):
+		// Server started successfully (no immediate error)
+	}
 
 	// Connect to our own server
 	return c.connectToOrchestrator(ctx, fmt.Sprintf("localhost:%d", port))
@@ -389,14 +395,19 @@ func (c *CIController) createWorkPlan(ctx context.Context) (string, error) {
 func (c *CIController) waitForCompletion(ctx context.Context, workPlanID string) (string, error) {
 	log.Println("Waiting for CI completion...")
 
-	ticker := time.NewTicker(500 * time.Millisecond)
+	ticker := time.NewTicker(2500 * time.Millisecond)
 	defer ticker.Stop()
+
+	pollCount := 0
+	lastDiagnosticAt := 0
 
 	for {
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
 		case <-ticker.C:
+			pollCount++
+
 			// Query the collector check for final status
 			resp, err := c.orchestrator.QueryNodes(ctx, &pb.QueryNodesRequest{
 				WorkPlanId:    workPlanID,
@@ -414,6 +425,11 @@ func (c *CIController) waitForCompletion(ctx context.Context, workPlanID string)
 
 			check := resp.Checks[0]
 			if check.State != pb.CheckState_CHECK_STATE_FINAL {
+				// Print diagnostic every 5 seconds (2 polls at 2500ms)
+				if pollCount-lastDiagnosticAt >= 2 {
+					lastDiagnosticAt = pollCount
+					c.printDiagnostics(ctx, workPlanID)
+				}
 				continue
 			}
 
@@ -433,6 +449,64 @@ func (c *CIController) waitForCompletion(ctx context.Context, workPlanID string)
 
 			return status, nil
 		}
+	}
+}
+
+func (c *CIController) printDiagnostics(ctx context.Context, workPlanID string) {
+	// Query all stages
+	stageResp, err := c.orchestrator.QueryNodes(ctx, &pb.QueryNodesRequest{
+		WorkPlanId:    workPlanID,
+		IncludeStages: true,
+	})
+	if err != nil {
+		log.Printf("[diag] Failed to query stages: %v", err)
+		return
+	}
+
+	// Count stages by state
+	stageStates := make(map[string]int)
+	var nonFinalStages []string
+	for _, stage := range stageResp.Stages {
+		stateName := stage.State.String()
+		stageStates[stateName]++
+		if stage.State != pb.StageState_STAGE_STATE_FINAL {
+			nonFinalStages = append(nonFinalStages, stage.Id)
+		}
+	}
+
+	log.Printf("[diag] Stages: total=%d states=%v", len(stageResp.Stages), stageStates)
+	if len(nonFinalStages) > 0 && len(nonFinalStages) <= 10 {
+		log.Printf("[diag] Non-final stages: %v", nonFinalStages)
+	} else if len(nonFinalStages) > 10 {
+		log.Printf("[diag] Non-final stages: %d remaining (first 10: %v)", len(nonFinalStages), nonFinalStages[:10])
+	}
+
+	// Query all checks
+	checkResp, err := c.orchestrator.QueryNodes(ctx, &pb.QueryNodesRequest{
+		WorkPlanId:    workPlanID,
+		IncludeChecks: true,
+	})
+	if err != nil {
+		log.Printf("[diag] Failed to query checks: %v", err)
+		return
+	}
+
+	// Count checks by state
+	checkStates := make(map[string]int)
+	var nonFinalChecks []string
+	for _, check := range checkResp.Checks {
+		stateName := check.State.String()
+		checkStates[stateName]++
+		if check.State != pb.CheckState_CHECK_STATE_FINAL {
+			nonFinalChecks = append(nonFinalChecks, fmt.Sprintf("\n\n  id: %s\n  kind: %s\n options: %v", check.Id, check.Id, check.Options))
+		}
+	}
+
+	log.Printf("[diag] Checks: total=%d states=%v", len(checkResp.Checks), checkStates)
+	if len(nonFinalChecks) > 0 && len(nonFinalChecks) <= 10 {
+		log.Printf("[diag] Non-final checks: %v", nonFinalChecks)
+	} else if len(nonFinalChecks) > 10 {
+		log.Printf("[diag] Non-final checks: %d remaining (first 5: %v)", len(nonFinalChecks), nonFinalChecks[:10])
 	}
 }
 
@@ -476,6 +550,11 @@ func (c *grpcRunnerClient) Run(ctx context.Context, req *service.RunRequest) (*s
 		WorkPlanId:  req.WorkPlanID,
 		StageId:     req.StageID,
 		AttemptIdx:  int32(req.AttemptIdx),
+	}
+
+	// Convert stage args
+	if req.Args != nil {
+		pbReq.Args, _ = structpb.NewStruct(req.Args)
 	}
 
 	// Convert check options
@@ -525,6 +604,11 @@ func (c *grpcRunnerClient) RunAsync(ctx context.Context, req *service.RunAsyncRe
 		WorkPlanId:  req.WorkPlanID,
 		StageId:     req.StageID,
 		AttemptIdx:  int32(req.AttemptIdx),
+	}
+
+	// Convert stage args
+	if req.Args != nil {
+		pbReq.Args, _ = structpb.NewStruct(req.Args)
 	}
 
 	for _, opt := range req.CheckOptions {

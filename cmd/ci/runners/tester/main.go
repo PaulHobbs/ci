@@ -19,8 +19,8 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
-	pb "github.com/example/turboci-lite/gen/turboci/v1"
 	"github.com/example/turboci-lite/cmd/ci/runners/common"
+	pb "github.com/example/turboci-lite/gen/turboci/v1"
 )
 
 var (
@@ -83,13 +83,13 @@ type TestEvent struct {
 
 // TestResult contains aggregated test results.
 type TestResult struct {
-	Package    string        `json:"package"`
-	Passed     int           `json:"passed"`
-	Failed     int           `json:"failed"`
-	Skipped    int           `json:"skipped"`
-	DurationMs int64         `json:"duration_ms"`
-	Tests      []TestDetail  `json:"tests"`
-	RawOutput  string        `json:"raw_output"`
+	Package    string       `json:"package"`
+	Passed     int          `json:"passed"`
+	Failed     int          `json:"failed"`
+	Skipped    int          `json:"skipped"`
+	DurationMs int64        `json:"duration_ms"`
+	Tests      []TestDetail `json:"tests"`
+	RawOutput  string       `json:"raw_output"`
 }
 
 // TestDetail contains details about a single test.
@@ -168,17 +168,9 @@ func (t *TesterRunner) HandleRun(ctx context.Context, req *pb.RunRequest) (*pb.R
 	log.Printf("[tester] Tests completed for %s: passed=%d failed=%d skipped=%d",
 		packagePath, result.Passed, result.Failed, result.Skipped)
 
+	var failure *pb.Failure
 	if testFailed {
-		return &pb.RunResponse{
-			StageState: pb.StageState_STAGE_STATE_FINAL,
-			CheckUpdates: []*pb.CheckUpdate{{
-				CheckId:    checkID,
-				State:      pb.CheckState_CHECK_STATE_FINAL,
-				ResultData: resultData,
-				Finalize:   true,
-				Failure:    &pb.Failure{Message: fmt.Sprintf("tests failed: %d failures", result.Failed)},
-			}},
-		}, nil
+		failure = &pb.Failure{Message: fmt.Sprintf("tests failed: %d failures")}
 	}
 
 	return &pb.RunResponse{
@@ -188,6 +180,7 @@ func (t *TesterRunner) HandleRun(ctx context.Context, req *pb.RunRequest) (*pb.R
 			State:      pb.CheckState_CHECK_STATE_FINAL,
 			ResultData: resultData,
 			Finalize:   true,
+			Failure:    failure,
 		}},
 	}, nil
 }

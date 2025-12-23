@@ -8,7 +8,12 @@
       "Bash(make proto:*)",
       "Bash(make test:*)",
       "Bash(go mod tidy:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(lsof:*)",
+      "Bash(pkill:*)",
+      "Bash(make run-ci:*)",
+      "Bash(timeout 45 ./bin/ci:*)",
+      "Bash(make build-ci:*)"
     ]
   }
 }

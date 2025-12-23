@@ -27,6 +27,7 @@ type RunRequest struct {
 	StageID        string
 	AttemptIdx     int
 	RunnerType     string
+	Args           map[string]any // Stage arguments
 	CheckOptions   []*CheckOptions
 	CallbackAddr   string
 	DeadlineMillis int64
@@ -46,6 +47,7 @@ type RunAsyncRequest struct {
 	StageID        string
 	AttemptIdx     int
 	RunnerType     string
+	Args           map[string]any // Stage arguments
 	CheckOptions   []*CheckOptions
 	CallbackAddr   string
 	DeadlineMillis int64
@@ -103,15 +105,15 @@ func DefaultDispatcherConfig() DispatcherConfig {
 
 // Dispatcher polls the execution queue and dispatches work to runners.
 type Dispatcher struct {
-	storage        storage.Storage
-	runnerService  *RunnerService
-	orchestrator   *OrchestratorService
-	config         DispatcherConfig
-	clientCache    map[string]*grpc.ClientConn
-	clientCacheMu  sync.RWMutex
-	clientFactory  func(address string) (StageRunnerClient, error)
-	stopCh         chan struct{}
-	wg             sync.WaitGroup
+	storage       storage.Storage
+	runnerService *RunnerService
+	orchestrator  *OrchestratorService
+	config        DispatcherConfig
+	clientCache   map[string]*grpc.ClientConn
+	clientCacheMu sync.RWMutex
+	clientFactory func(address string) (StageRunnerClient, error)
+	stopCh        chan struct{}
+	wg            sync.WaitGroup
 }
 
 // NewDispatcher creates a new Dispatcher.
@@ -352,20 +354,21 @@ func (d *Dispatcher) dispatchExecution(ctx context.Context, uow storage.UnitOfWo
 
 	// Dispatch based on execution mode
 	if exec.ExecutionMode == domain.ExecutionModeAsync {
-		return d.dispatchAsync(ctx, client, exec, checkOptions, deadline)
+		return d.dispatchAsync(ctx, client, exec, stage.Args, checkOptions, deadline)
 	}
-	return d.dispatchSync(ctx, uow, client, exec, checkOptions, deadline)
+	return d.dispatchSync(ctx, uow, client, exec, stage.Args, checkOptions, deadline)
 }
 
 // dispatchSync dispatches a synchronous execution (blocks until complete).
 // Note: This commits the uow before calling the runner to avoid transaction conflicts.
-func (d *Dispatcher) dispatchSync(ctx context.Context, uow storage.UnitOfWork, client StageRunnerClient, exec *domain.StageExecution, checkOptions []*CheckOptions, deadline time.Time) error {
+func (d *Dispatcher) dispatchSync(ctx context.Context, uow storage.UnitOfWork, client StageRunnerClient, exec *domain.StageExecution, stageArgs map[string]any, checkOptions []*CheckOptions, deadline time.Time) error {
 	req := &RunRequest{
 		ExecutionID:    exec.ID,
 		WorkPlanID:     exec.WorkPlanID,
 		StageID:        exec.StageID,
 		AttemptIdx:     exec.AttemptIdx,
 		RunnerType:     exec.RunnerType,
+		Args:           stageArgs,
 		CheckOptions:   checkOptions,
 		CallbackAddr:   d.config.CallbackAddress,
 		DeadlineMillis: deadline.UnixMilli(),
@@ -442,13 +445,14 @@ func (d *Dispatcher) dispatchSync(ctx context.Context, uow storage.UnitOfWork, c
 }
 
 // dispatchAsync dispatches an asynchronous execution (returns immediately).
-func (d *Dispatcher) dispatchAsync(ctx context.Context, client StageRunnerClient, exec *domain.StageExecution, checkOptions []*CheckOptions, deadline time.Time) error {
+func (d *Dispatcher) dispatchAsync(ctx context.Context, client StageRunnerClient, exec *domain.StageExecution, stageArgs map[string]any, checkOptions []*CheckOptions, deadline time.Time) error {
 	req := &RunAsyncRequest{
 		ExecutionID:    exec.ID,
 		WorkPlanID:     exec.WorkPlanID,
 		StageID:        exec.StageID,
 		AttemptIdx:     exec.AttemptIdx,
 		RunnerType:     exec.RunnerType,
+		Args:           stageArgs,
 		CheckOptions:   checkOptions,
 		CallbackAddr:   d.config.CallbackAddress,
 		DeadlineMillis: deadline.UnixMilli(),
