@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -83,7 +84,7 @@ func (s *Server) GracefulStop() {
 	s.grpcServer.GracefulStop()
 }
 
-// LoggingInterceptor returns a gRPC interceptor that logs requests.
+// LoggingInterceptor returns a gRPC interceptor that logs requests and their duration.
 func LoggingInterceptor() grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
@@ -91,13 +92,35 @@ func LoggingInterceptor() grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
-		log.Printf("gRPC call: %s", info.FullMethod)
+		start := time.Now()
+		
+		// Attempt to extract WorkPlanID for better logging
+		wpID := extractWorkPlanID(req)
+		
 		resp, err := handler(ctx, req)
+		
+		duration := time.Since(start)
+		if wpID != "" {
+			log.Printf("gRPC call: %s [WP:%s] duration=%v", info.FullMethod, wpID, duration)
+		} else {
+			log.Printf("gRPC call: %s duration=%v", info.FullMethod, duration)
+		}
+		
 		if err != nil {
 			log.Printf("gRPC error: %s: %v", info.FullMethod, err)
 		}
 		return resp, err
 	}
+}
+
+func extractWorkPlanID(req interface{}) string {
+	type wpIDer interface {
+		GetWorkPlanId() string
+	}
+	if w, ok := req.(wpIDer); ok {
+		return w.GetWorkPlanId()
+	}
+	return ""
 }
 
 // RecoveryInterceptor returns a gRPC interceptor that recovers from panics.

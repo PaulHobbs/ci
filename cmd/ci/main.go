@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -106,6 +107,9 @@ type CIController struct {
 func (c *CIController) Run(ctx context.Context, orchestratorAddr string, grpcPort int, dbPath string) int {
 	var err error
 
+	// Kill any existing runners before starting anything
+	c.killExistingRunners(ctx)
+
 	// Start or connect to orchestrator
 	if orchestratorAddr != "" {
 		log.Printf("Connecting to existing orchestrator at %s", orchestratorAddr)
@@ -157,6 +161,28 @@ func (c *CIController) Run(ctx context.Context, orchestratorAddr string, grpcPor
 		log.Printf("CI completed with status: %s", status)
 		return 0
 	}
+}
+
+func (c *CIController) killExistingRunners(ctx context.Context) {
+	myPid := fmt.Sprintf("%d", os.Getpid())
+	ports := []int{50051, 50061, 50062, 50063, 50064, 50065, 50066}
+	for _, port := range ports {
+		// Use lsof to find PID listening on port
+		cmd := exec.CommandContext(ctx, "lsof", "-t", fmt.Sprintf("-i:%d", port))
+		output, err := cmd.Output()
+		if err == nil {
+			pids := strings.Fields(string(output))
+			for _, pid := range pids {
+				if pid == myPid {
+					continue
+				}
+				log.Printf("Killing legacy process %s listening on port %d", pid, port)
+				exec.Command("kill", "-9", pid).Run()
+			}
+		}
+	}
+	// Give OS time to release ports
+	time.Sleep(500 * time.Millisecond)
 }
 
 func (c *CIController) connectToOrchestrator(ctx context.Context, addr string) error {
@@ -257,8 +283,8 @@ func (c *CIController) startRunners(ctx context.Context, orchestratorAddr string
 	}{
 		{"trigger", "trigger", 50061, []string{"-repo-root", c.repoRoot}},
 		{"materialize", "materialize", 50062, nil},
-		{"builder", "builder", 50063, []string{"-repo-root", c.repoRoot}},
-		{"tester", "tester", 50064, []string{"-repo-root", c.repoRoot}},
+		{"builder", "builder", 50063, []string{"-repo-root", c.repoRoot, "-max-concurrent", "8"}},
+		{"tester", "tester", 50064, []string{"-repo-root", c.repoRoot, "-max-concurrent", "16"}},
 		{"conditional", "conditional", 50065, []string{"-repo-root", c.repoRoot}},
 		{"collector", "collector", 50066, []string{"-output-dir", c.outputDir}},
 	}
@@ -271,10 +297,17 @@ func (c *CIController) startRunners(ctx context.Context, orchestratorAddr string
 	binDir := filepath.Dir(execPath)
 
 	for _, r := range runners {
-		runnerPath := filepath.Join(binDir, r.binary+"-runner")
-		// Also check in cmd/ci/runners/<name>
+		start := time.Now()
+		// Try bin/ in repo root first
+		runnerPath := filepath.Join(c.repoRoot, "bin", r.binary+"-runner")
+		
 		if _, err := os.Stat(runnerPath); os.IsNotExist(err) {
-			// Try building inline
+			// Try bin/ next to executable
+			runnerPath = filepath.Join(binDir, r.binary+"-runner")
+		}
+
+		// Fallback to go run if still not found
+		if _, err := os.Stat(runnerPath); os.IsNotExist(err) {
 			log.Printf("Runner binary %s not found, using go run", r.binary)
 			runnerPath = filepath.Join(c.repoRoot, "cmd", "ci", "runners", r.binary, "main.go")
 		}
@@ -295,6 +328,9 @@ func (c *CIController) startRunners(ctx context.Context, orchestratorAddr string
 			cmd = exec.CommandContext(ctx, runnerPath, args...)
 		}
 
+		// Use process groups to ensure all children (especially 'go run' processes) are killed
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
 		cmd.Dir = c.repoRoot
 		if c.verbose {
 			cmd.Stdout = os.Stdout
@@ -306,7 +342,7 @@ func (c *CIController) startRunners(ctx context.Context, orchestratorAddr string
 		}
 
 		c.processes = append(c.processes, cmd)
-		log.Printf("Started %s runner (pid=%d, port=%d)", r.name, cmd.Process.Pid, r.port)
+		log.Printf("Started %s runner (pid=%d, port=%d, took=%v)", r.name, cmd.Process.Pid, r.port, time.Since(start))
 	}
 
 	return nil
@@ -514,14 +550,16 @@ func (c *CIController) cleanup() {
 	// Stop runner processes
 	for _, cmd := range c.processes {
 		if cmd.Process != nil {
-			cmd.Process.Signal(syscall.SIGTERM)
+			// Signal the entire process group
+			syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			
 			// Give it a moment to exit gracefully
 			done := make(chan error, 1)
 			go func() { done <- cmd.Wait() }()
 			select {
 			case <-done:
 			case <-time.After(2 * time.Second):
-				cmd.Process.Kill()
+				syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 			}
 		}
 	}

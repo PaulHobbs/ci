@@ -159,15 +159,9 @@ func (s *RunnerService) Heartbeat(ctx context.Context, registrationID string, tt
 	return uow.Commit()
 }
 
-// SelectRunner selects an available runner for a given type and mode.
+// SelectRunner selects an available runner for a given type and mode using the provided UnitOfWork.
 // Returns the runner with the lowest current load.
-func (s *RunnerService) SelectRunner(ctx context.Context, runnerType string, mode domain.ExecutionMode) (*domain.StageRunner, error) {
-	uow, err := s.storage.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer uow.Rollback()
-
+func (s *RunnerService) SelectRunner(ctx context.Context, uow storage.UnitOfWork, runnerType string, mode domain.ExecutionMode) (*domain.StageRunner, error) {
 	runners, err := uow.StageRunners().GetAvailable(ctx, runnerType, mode)
 	if err != nil {
 		return nil, err

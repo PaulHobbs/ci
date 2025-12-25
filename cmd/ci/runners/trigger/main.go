@@ -168,6 +168,7 @@ func (t *TriggerRunner) createFailureResponse(req *pb.RunRequest, msg string) (*
 }
 
 func (t *TriggerRunner) analyzeChanges(ctx context.Context, baseRef, headRef string) (*AnalysisResult, error) {
+	start := time.Now()
 	result := &AnalysisResult{
 		BaseRef: baseRef,
 		HeadRef: headRef,
@@ -180,6 +181,7 @@ func (t *TriggerRunner) analyzeChanges(ctx context.Context, baseRef, headRef str
 		log.Printf("[trigger] Git diff failed, analyzing all packages: %v", err)
 		return t.analyzeAllPackages(ctx)
 	}
+	log.Printf("[trigger] Git diff took %v", time.Since(start))
 
 	if len(changedFiles) == 0 {
 		log.Printf("[trigger] No changes detected between %s and %s", baseRef, headRef)
@@ -198,10 +200,12 @@ func (t *TriggerRunner) analyzeChanges(ctx context.Context, baseRef, headRef str
 	}
 
 	// Get all packages and filter to affected ones
+	listStart := time.Now()
 	allPackages, err := t.listPackages(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list packages: %w", err)
 	}
+	log.Printf("[trigger] listPackages took %v (found %d total)", time.Since(listStart), len(allPackages))
 
 	for _, pkg := range allPackages {
 		relDir, _ := filepath.Rel(t.repoRoot, pkg.Dir)
@@ -211,14 +215,17 @@ func (t *TriggerRunner) analyzeChanges(ctx context.Context, baseRef, headRef str
 	}
 
 	// Find binaries
+	binStart := time.Now()
 	result.Binaries, err = t.findBinaries(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find binaries: %w", err)
 	}
+	log.Printf("[trigger] findBinaries took %v", time.Since(binStart))
 
 	// Find E2E tests
 	result.E2ETests = t.findE2ETests(result.Packages)
 
+	log.Printf("[trigger] analyzeChanges total took %v", time.Since(start))
 	return result, nil
 }
 
@@ -298,12 +305,14 @@ func (t *TriggerRunner) listPackages(ctx context.Context) ([]AffectedPackage, er
 }
 
 func (t *TriggerRunner) listModulePackages(ctx context.Context, modDir string) ([]AffectedPackage, error) {
+	start := time.Now()
 	cmd := exec.CommandContext(ctx, "go", "list", "-json", "./...")
 	cmd.Dir = modDir
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("go list failed in %s: %w", modDir, err)
 	}
+	log.Printf("[trigger] go list in %s took %v", modDir, time.Since(start))
 
 	var packages []AffectedPackage
 	decoder := json.NewDecoder(bytes.NewReader(output))

@@ -142,10 +142,44 @@ func (d *Dispatcher) SetClientFactory(factory func(address string) (StageRunnerC
 
 // Start begins the dispatcher loops.
 func (d *Dispatcher) Start() {
-	d.wg.Add(3)
+	d.wg.Add(4)
 	go d.pollLoop()
 	go d.cleanupLoop()
 	go d.staleCheckLoop()
+	go d.statusLoop()
+}
+
+// statusLoop periodically logs dispatcher status.
+func (d *Dispatcher) statusLoop() {
+	defer d.wg.Done()
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-d.stopCh:
+			return
+		case <-ticker.C:
+			runners, err := d.runnerService.ListRunners(context.Background(), nil)
+			if err != nil {
+				log.Printf("dispatcher status: error listing runners: %v", err)
+				continue
+			}
+
+			loadByType := make(map[string]int)
+			countByType := make(map[string]int)
+			for _, r := range runners {
+				loadByType[r.RunnerType] += r.CurrentLoad
+				countByType[r.RunnerType]++
+			}
+
+			if len(runners) > 0 {
+				log.Printf("dispatcher status: %d runners registered, load_by_type=%v, count_by_type=%v", 
+					len(runners), loadByType, countByType)
+			}
+		}
+	}
 }
 
 // Stop gracefully stops the dispatcher.
@@ -236,6 +270,10 @@ func (d *Dispatcher) processPendingExecutions(ctx context.Context) error {
 		runnerTypes[r.RunnerType] = true
 	}
 
+	if len(runnerTypes) == 0 {
+		return nil
+	}
+
 	// For each runner type, get pending executions
 	for runnerType := range runnerTypes {
 		if err := d.dispatchForRunnerType(ctx, runnerType); err != nil {
@@ -273,7 +311,7 @@ func (d *Dispatcher) dispatchForRunnerType(ctx context.Context, runnerType strin
 		}
 
 		// Select an available runner
-		runner, err := d.runnerService.SelectRunner(ctx, runnerType, exec.ExecutionMode)
+		runner, err := d.runnerService.SelectRunner(ctx, uow, runnerType, exec.ExecutionMode)
 		if err == domain.ErrRunnerNotFound {
 			// No runners available, skip for now
 			uow.Rollback()
@@ -285,6 +323,8 @@ func (d *Dispatcher) dispatchForRunnerType(ctx context.Context, runnerType strin
 			continue
 		}
 
+		log.Printf("dispatcher: dispatching execution %s (stage %s) to runner %s", exec.ID, exec.StageID, runner.ID)
+		
 		// Dispatch to the runner
 		// Note: dispatchSync commits the transaction before calling the runner
 		if err := d.dispatchExecution(ctx, uow, exec, runner); err != nil {
