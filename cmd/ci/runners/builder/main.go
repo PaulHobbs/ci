@@ -14,8 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"google.golang.org/protobuf/types/known/structpb"
-
 	pb "github.com/example/turboci-lite/gen/turboci/v1"
 	"github.com/example/turboci-lite/cmd/ci/runners/common"
 )
@@ -137,7 +135,7 @@ func (b *BuilderRunner) HandleRun(ctx context.Context, req *pb.RunRequest) (*pb.
 	}
 
 	// Build result data
-	resultData, _ := structpb.NewStruct(map[string]any{
+	resultData := map[string]any{
 		"binary":      binaryPath,
 		"output":      outputName,
 		"output_path": outputPath,
@@ -146,45 +144,25 @@ func (b *BuilderRunner) HandleRun(ctx context.Context, req *pb.RunRequest) (*pb.
 		"success":     err == nil,
 		"exit_code":   exitCode,
 		"duration_ms": duration.Milliseconds(),
-	})
+	}
 
 	// Check if build succeeded
 	if err != nil {
 		log.Printf("[builder] Build failed for %s: %v", outputName, err)
-		return &pb.RunResponse{
-			StageState: pb.StageState_STAGE_STATE_FINAL,
-			CheckUpdates: []*pb.CheckUpdate{{
-				CheckId:    checkID,
-				State:      pb.CheckState_CHECK_STATE_FINAL,
-				ResultData: resultData,
-				Finalize:   true,
-				Failure:    &pb.Failure{Message: fmt.Sprintf("build failed: %v", err)},
-			}},
-		}, nil
+		return common.NewResponse().
+			FailCheck(checkID, fmt.Sprintf("build failed: %v", err), resultData).
+			Build(), nil
 	}
 
 	log.Printf("[builder] Build succeeded for %s in %v", outputName, duration)
-
-	return &pb.RunResponse{
-		StageState: pb.StageState_STAGE_STATE_FINAL,
-		CheckUpdates: []*pb.CheckUpdate{{
-			CheckId:    checkID,
-			State:      pb.CheckState_CHECK_STATE_FINAL,
-			ResultData: resultData,
-			Finalize:   true,
-		}},
-	}, nil
+	return common.NewResponse().
+		FinalizeCheck(checkID, resultData).
+		Build(), nil
 }
 
 func (b *BuilderRunner) createFailureResponse(req *pb.RunRequest, msg string) (*pb.RunResponse, error) {
 	log.Printf("[builder] Error: %s", msg)
-	return &pb.RunResponse{
-		StageState: pb.StageState_STAGE_STATE_FINAL,
-		CheckUpdates: []*pb.CheckUpdate{{
-			CheckId:  req.AssignedCheckIds[0],
-			State:    pb.CheckState_CHECK_STATE_FINAL,
-			Finalize: true,
-			Failure:  &pb.Failure{Message: msg},
-		}},
-	}, nil
+	return common.NewResponse().
+		FailCheck(req.AssignedCheckIds[0], msg, nil).
+		Build(), nil
 }

@@ -16,8 +16,6 @@ import (
 	"syscall"
 	"time"
 
-	"google.golang.org/protobuf/types/known/structpb"
-
 	pb "github.com/example/turboci-lite/gen/turboci/v1"
 	"github.com/example/turboci-lite/cmd/ci/runners/common"
 )
@@ -164,21 +162,13 @@ func (c *ConditionalRunner) checkUpstreamDependencies(ctx context.Context, workP
 }
 
 func (c *ConditionalRunner) createSkipResponse(req *pb.RunRequest, failedChecks []string) (*pb.RunResponse, error) {
-	resultData, _ := structpb.NewStruct(map[string]any{
-		"skipped":        true,
-		"reason":         "upstream_dependency_failed",
-		"failed_checks":  failedChecks,
-	})
-
-	return &pb.RunResponse{
-		StageState: pb.StageState_STAGE_STATE_FINAL,
-		CheckUpdates: []*pb.CheckUpdate{{
-			CheckId:    req.AssignedCheckIds[0],
-			State:      pb.CheckState_CHECK_STATE_FINAL,
-			ResultData: resultData,
-			Finalize:   true,
-		}},
-	}, nil
+	return common.NewResponse().
+		FinalizeCheck(req.AssignedCheckIds[0], map[string]any{
+			"skipped":       true,
+			"reason":        "upstream_dependency_failed",
+			"failed_checks": failedChecks,
+		}).
+		Build(), nil
 }
 
 func (c *ConditionalRunner) runE2ETest(ctx context.Context, req *pb.RunRequest, testPath, testName string) (*pb.RunResponse, error) {
@@ -199,7 +189,7 @@ func (c *ConditionalRunner) runE2ETest(ctx context.Context, req *pb.RunRequest, 
 	testFailed := err != nil || result.Failed > 0
 
 	// Build result data
-	resultData, _ := structpb.NewStruct(map[string]any{
+	resultData := map[string]any{
 		"test_path":   testPath,
 		"test_name":   testName,
 		"passed":      result.Passed,
@@ -207,33 +197,20 @@ func (c *ConditionalRunner) runE2ETest(ctx context.Context, req *pb.RunRequest, 
 		"skipped":     result.Skipped,
 		"duration_ms": result.DurationMs,
 		"success":     !testFailed,
-	})
+	}
 
 	log.Printf("[conditional] E2E test %s completed: passed=%d failed=%d",
 		testName, result.Passed, result.Failed)
 
 	if testFailed {
-		return &pb.RunResponse{
-			StageState: pb.StageState_STAGE_STATE_FINAL,
-			CheckUpdates: []*pb.CheckUpdate{{
-				CheckId:    checkID,
-				State:      pb.CheckState_CHECK_STATE_FINAL,
-				ResultData: resultData,
-				Finalize:   true,
-				Failure:    &pb.Failure{Message: fmt.Sprintf("E2E tests failed: %d failures", result.Failed)},
-			}},
-		}, nil
+		return common.NewResponse().
+			FailCheck(checkID, fmt.Sprintf("E2E tests failed: %d failures", result.Failed), resultData).
+			Build(), nil
 	}
 
-	return &pb.RunResponse{
-		StageState: pb.StageState_STAGE_STATE_FINAL,
-		CheckUpdates: []*pb.CheckUpdate{{
-			CheckId:    checkID,
-			State:      pb.CheckState_CHECK_STATE_FINAL,
-			ResultData: resultData,
-			Finalize:   true,
-		}},
-	}, nil
+	return common.NewResponse().
+		FinalizeCheck(checkID, resultData).
+		Build(), nil
 }
 
 // TestResult contains aggregated test results.
@@ -282,13 +259,7 @@ func (c *ConditionalRunner) parseTestOutput(output []byte, packagePath string) *
 
 func (c *ConditionalRunner) createFailureResponse(req *pb.RunRequest, msg string) (*pb.RunResponse, error) {
 	log.Printf("[conditional] Error: %s", msg)
-	return &pb.RunResponse{
-		StageState: pb.StageState_STAGE_STATE_FINAL,
-		CheckUpdates: []*pb.CheckUpdate{{
-			CheckId:  req.AssignedCheckIds[0],
-			State:    pb.CheckState_CHECK_STATE_FINAL,
-			Finalize: true,
-			Failure:  &pb.Failure{Message: msg},
-		}},
-	}, nil
+	return common.NewResponse().
+		FailCheck(req.AssignedCheckIds[0], msg, nil).
+		Build(), nil
 }

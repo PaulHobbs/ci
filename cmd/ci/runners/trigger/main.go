@@ -18,8 +18,6 @@ import (
 	"syscall"
 	"time"
 
-	"google.golang.org/protobuf/types/known/structpb"
-
 	pb "github.com/example/turboci-lite/gen/turboci/v1"
 	"github.com/example/turboci-lite/cmd/ci/runners/common"
 )
@@ -135,36 +133,22 @@ func (t *TriggerRunner) HandleRun(ctx context.Context, req *pb.RunRequest) (*pb.
 		return t.createFailureResponse(req, fmt.Sprintf("failed to create checks: %v", err))
 	}
 
-	// Create result data
-	resultData, _ := structpb.NewStruct(map[string]any{
-		"packages_count":  len(analysis.Packages),
-		"binaries_count":  len(analysis.Binaries),
-		"e2e_tests_count": len(analysis.E2ETests),
-		"base_ref":        baseRef,
-		"head_ref":        headRef,
-	})
-
-	return &pb.RunResponse{
-		StageState: pb.StageState_STAGE_STATE_FINAL,
-		CheckUpdates: []*pb.CheckUpdate{{
-			CheckId:    req.AssignedCheckIds[0],
-			State:      pb.CheckState_CHECK_STATE_FINAL,
-			ResultData: resultData,
-			Finalize:   true,
-		}},
-	}, nil
+	// Create result using ResponseBuilder
+	return common.NewResponse().
+		FinalizeCheck(req.AssignedCheckIds[0], map[string]any{
+			"packages_count":  len(analysis.Packages),
+			"binaries_count":  len(analysis.Binaries),
+			"e2e_tests_count": len(analysis.E2ETests),
+			"base_ref":        baseRef,
+			"head_ref":        headRef,
+		}).
+		Build(), nil
 }
 
 func (t *TriggerRunner) createFailureResponse(req *pb.RunRequest, msg string) (*pb.RunResponse, error) {
-	return &pb.RunResponse{
-		StageState: pb.StageState_STAGE_STATE_FINAL,
-		CheckUpdates: []*pb.CheckUpdate{{
-			CheckId:  req.AssignedCheckIds[0],
-			State:    pb.CheckState_CHECK_STATE_FINAL,
-			Finalize: true,
-			Failure:  &pb.Failure{Message: msg},
-		}},
-	}, nil
+	return common.NewResponse().
+		FailCheck(req.AssignedCheckIds[0], msg, nil).
+		Build(), nil
 }
 
 func (t *TriggerRunner) analyzeChanges(ctx context.Context, baseRef, headRef string) (*AnalysisResult, error) {
@@ -405,21 +389,18 @@ func (t *TriggerRunner) findE2ETests(packages []AffectedPackage) []E2ETest {
 func (t *TriggerRunner) createChecks(ctx context.Context, workPlanID string, analysis *AnalysisResult) error {
 	var checks []*pb.CheckWrite
 
-	// Create build checks
+	// Create build checks using the fluent builder
 	for _, bin := range analysis.Binaries {
-		opts, _ := structpb.NewStruct(map[string]any{
-			"binary":  bin.Path,
-			"output":  bin.Name,
-			"dir":     bin.Dir,
-			"go_mod":  bin.GoMod,
-		})
-
-		checks = append(checks, &pb.CheckWrite{
-			Id:      fmt.Sprintf("build:%s", bin.Name),
-			State:   pb.CheckState_CHECK_STATE_PLANNING,
-			Kind:    "build",
-			Options: opts,
-		})
+		checks = append(checks, common.NewCheck(fmt.Sprintf("build:%s", bin.Name)).
+			Kind("build").
+			Planning().
+			Options(map[string]any{
+				"binary": bin.Path,
+				"output": bin.Name,
+				"dir":    bin.Dir,
+				"go_mod": bin.GoMod,
+			}).
+			Build())
 	}
 
 	// Create unit test checks (depend on relevant builds)
@@ -429,72 +410,37 @@ func (t *TriggerRunner) createChecks(ctx context.Context, workPlanID string, ana
 			continue
 		}
 
-		opts, _ := structpb.NewStruct(map[string]any{
-			"package": pkg.Path,
-			"module":  pkg.Module,
-			"dir":     pkg.Dir,
-		})
-
 		// Find build dependencies for this package
-		var deps []*pb.Dependency
+		var buildDeps []string
 		for _, bin := range analysis.Binaries {
-			// If the package is under a binary's directory, depend on that build
 			if strings.HasPrefix(pkg.Dir, bin.Dir) || pkg.Module == bin.GoMod {
-				deps = append(deps, &pb.Dependency{
-					TargetType: pb.NodeType_NODE_TYPE_CHECK,
-					TargetId:   fmt.Sprintf("build:%s", bin.Name),
-				})
+				buildDeps = append(buildDeps, fmt.Sprintf("build:%s", bin.Name))
 			}
 		}
 
-		var depGroup *pb.DependencyGroup
-		if len(deps) > 0 {
-			depGroup = &pb.DependencyGroup{
-				Predicate:    pb.PredicateType_PREDICATE_TYPE_AND,
-				Dependencies: deps,
-			}
-		}
-
-		checks = append(checks, &pb.CheckWrite{
-			Id:           fmt.Sprintf("test:%s", pkg.Path),
-			State:        pb.CheckState_CHECK_STATE_PLANNING,
-			Kind:         "unit_test",
-			Options:      opts,
-			Dependencies: depGroup,
-		})
+		checks = append(checks, common.NewCheck(fmt.Sprintf("test:%s", pkg.Path)).
+			Kind("unit_test").
+			Planning().
+			Options(map[string]any{
+				"package": pkg.Path,
+				"module":  pkg.Module,
+				"dir":     pkg.Dir,
+			}).
+			Dependencies(common.DepsAND(buildDeps...)).
+			Build())
 	}
 
 	// Create E2E test checks
 	for _, e2e := range analysis.E2ETests {
-		opts, _ := structpb.NewStruct(map[string]any{
-			"test_path": e2e.Path,
-			"name":      e2e.Name,
-		})
-
-		// E2E tests depend on unit tests
-		var deps []*pb.Dependency
-		for _, depID := range e2e.DependsOn {
-			deps = append(deps, &pb.Dependency{
-				TargetType: pb.NodeType_NODE_TYPE_CHECK,
-				TargetId:   depID,
-			})
-		}
-
-		var depGroup *pb.DependencyGroup
-		if len(deps) > 0 {
-			depGroup = &pb.DependencyGroup{
-				Predicate:    pb.PredicateType_PREDICATE_TYPE_AND,
-				Dependencies: deps,
-			}
-		}
-
-		checks = append(checks, &pb.CheckWrite{
-			Id:           fmt.Sprintf("e2e:%s", e2e.Name),
-			State:        pb.CheckState_CHECK_STATE_PLANNING,
-			Kind:         "e2e_test",
-			Options:      opts,
-			Dependencies: depGroup,
-		})
+		checks = append(checks, common.NewCheck(fmt.Sprintf("e2e:%s", e2e.Name)).
+			Kind("e2e_test").
+			Planning().
+			Options(map[string]any{
+				"test_path": e2e.Path,
+				"name":      e2e.Name,
+			}).
+			Dependencies(common.DepsAND(e2e.DependsOn...)).
+			Build())
 	}
 
 	if len(checks) == 0 {

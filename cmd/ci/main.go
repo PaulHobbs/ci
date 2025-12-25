@@ -20,11 +20,13 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	pb "github.com/example/turboci-lite/gen/turboci/v1"
+	"github.com/example/turboci-lite/cmd/ci/progress"
 	"github.com/example/turboci-lite/internal/domain"
 	"github.com/example/turboci-lite/internal/endpoint"
 	"github.com/example/turboci-lite/internal/service"
 	"github.com/example/turboci-lite/internal/storage/sqlite"
 	grpctransport "github.com/example/turboci-lite/internal/transport/grpc"
+	"github.com/example/turboci-lite/pkg/ci"
 )
 
 var (
@@ -97,10 +99,12 @@ type CIController struct {
 	headRef   string
 	verbose   bool
 
-	orchestrator pb.TurboCIOrchestratorClient
-	conn         *grpc.ClientConn
-	server       *grpc.Server
-	processes    []*exec.Cmd
+	orchestrator    pb.TurboCIOrchestratorClient    // gRPC client for diagnostics
+	orchestratorSvc *service.OrchestratorService   // internal service for pkg/ci
+	conn            *grpc.ClientConn
+	server          *grpc.Server
+	processes       []*exec.Cmd
+	startTime       time.Time
 }
 
 // Run executes the CI pipeline and returns an exit code.
@@ -134,20 +138,24 @@ func (c *CIController) Run(ctx context.Context, orchestratorAddr string, grpcPor
 	log.Println("Waiting for runners to register...")
 	time.Sleep(500 * time.Millisecond)
 
-	// Create work plan and initial stages
-	workPlanID, err := c.createWorkPlan(ctx)
+	// Create work plan and initial stages using DAG API
+	c.startTime = time.Now()
+	exec, err := c.createWorkPlan(ctx)
 	if err != nil {
 		log.Printf("Failed to create work plan: %v", err)
 		return 1
 	}
-	log.Printf("Created work plan: %s", workPlanID)
+	log.Printf("Created work plan: %s", exec.WorkPlanID())
 
 	// Wait for completion
-	status, err := c.waitForCompletion(ctx, workPlanID)
+	status, err := c.waitForCompletion(ctx, exec)
 	if err != nil {
 		log.Printf("CI execution failed: %v", err)
 		return 1
 	}
+
+	// Print detailed results summary
+	c.printFinalResults(ctx, exec.WorkPlanID())
 
 	// Return exit code based on status
 	switch status {
@@ -217,6 +225,7 @@ func (c *CIController) startEmbeddedOrchestrator(ctx context.Context, port int, 
 
 	// Create services (matching cmd/server/main.go pattern)
 	orchestratorSvc := service.NewOrchestrator(store)
+	c.orchestratorSvc = orchestratorSvc // Store for pkg/ci usage
 	runnerSvc := service.NewRunnerService(store)
 	callbackSvc := service.NewCallbackService(store, orchestratorSvc)
 
@@ -348,89 +357,42 @@ func (c *CIController) startRunners(ctx context.Context, orchestratorAddr string
 	return nil
 }
 
-func (c *CIController) createWorkPlan(ctx context.Context) (string, error) {
-	// Create work plan
-	wpResp, err := c.orchestrator.CreateWorkPlan(ctx, &pb.CreateWorkPlanRequest{
-		Metadata: map[string]string{
-			"type":     "ci",
-			"base_ref": c.baseRef,
-			"head_ref": c.headRef,
-		},
-	})
+func (c *CIController) createWorkPlan(ctx context.Context) (*ci.WorkflowExecution, error) {
+	// Build CI workflow using DAG API
+	dag := ci.NewDAG()
+
+	// Phase 1: Trigger - detect changed packages
+	triggerCheck := dag.Check("trigger:detect_changes").Kind("trigger")
+	triggerStage := dag.Stage("stage:trigger").
+		Runner("trigger_builds").
+		Sync().
+		Arg("base_ref", c.baseRef).
+		Arg("head_ref", c.headRef).
+		Assigns(triggerCheck)
+
+	// Phase 2: Materialize - create build/test stages from trigger results
+	materializeCheck := dag.Check("materialize:create_stages").
+		Kind("materialize").
+		DependsOn(triggerCheck)
+	dag.Stage("stage:materialize").
+		Runner("materialize").
+		Sync().
+		Assigns(materializeCheck).
+		After(triggerStage)
+
+	// Execute the DAG
+	exec, err := dag.Execute(ctx, c.orchestratorSvc)
 	if err != nil {
-		return "", fmt.Errorf("failed to create work plan: %w", err)
+		return nil, fmt.Errorf("failed to execute workflow: %w", err)
 	}
 
-	workPlanID := wpResp.WorkPlan.Id
-
-	// Create trigger check and stage
-	triggerArgs, _ := structpb.NewStruct(map[string]any{
-		"base_ref": c.baseRef,
-		"head_ref": c.headRef,
-	})
-
-	_, err = c.orchestrator.WriteNodes(ctx, &pb.WriteNodesRequest{
-		WorkPlanId: workPlanID,
-		Checks: []*pb.CheckWrite{
-			{
-				Id:    "trigger:detect_changes",
-				State: pb.CheckState_CHECK_STATE_PLANNING,
-				Kind:  "trigger",
-			},
-			{
-				Id:    "materialize:create_stages",
-				State: pb.CheckState_CHECK_STATE_PLANNING,
-				Kind:  "materialize",
-				Dependencies: &pb.DependencyGroup{
-					Predicate: pb.PredicateType_PREDICATE_TYPE_AND,
-					Dependencies: []*pb.Dependency{{
-						TargetType: pb.NodeType_NODE_TYPE_CHECK,
-						TargetId:   "trigger:detect_changes",
-					}},
-				},
-			},
-		},
-		Stages: []*pb.StageWrite{
-			{
-				Id:            "stage:trigger",
-				State:         pb.StageState_STAGE_STATE_PLANNED,
-				RunnerType:    "trigger_builds",
-				ExecutionMode: pb.ExecutionMode_EXECUTION_MODE_SYNC,
-				Args:          triggerArgs,
-				Assignments: []*pb.Assignment{{
-					TargetCheckId: "trigger:detect_changes",
-					GoalState:     pb.CheckState_CHECK_STATE_FINAL,
-				}},
-			},
-			{
-				Id:            "stage:materialize",
-				State:         pb.StageState_STAGE_STATE_PLANNED,
-				RunnerType:    "materialize",
-				ExecutionMode: pb.ExecutionMode_EXECUTION_MODE_SYNC,
-				Assignments: []*pb.Assignment{{
-					TargetCheckId: "materialize:create_stages",
-					GoalState:     pb.CheckState_CHECK_STATE_FINAL,
-				}},
-				Dependencies: &pb.DependencyGroup{
-					Predicate: pb.PredicateType_PREDICATE_TYPE_AND,
-					Dependencies: []*pb.Dependency{{
-						TargetType: pb.NodeType_NODE_TYPE_STAGE,
-						TargetId:   "stage:trigger",
-					}},
-				},
-			},
-		},
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to create initial stages: %w", err)
-	}
-
-	return workPlanID, nil
+	return exec, nil
 }
 
-func (c *CIController) waitForCompletion(ctx context.Context, workPlanID string) (string, error) {
+func (c *CIController) waitForCompletion(ctx context.Context, exec *ci.WorkflowExecution) (string, error) {
 	log.Println("Waiting for CI completion...")
 
+	workPlanID := exec.WorkPlanID()
 	ticker := time.NewTicker(2500 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -444,23 +406,18 @@ func (c *CIController) waitForCompletion(ctx context.Context, workPlanID string)
 		case <-ticker.C:
 			pollCount++
 
-			// Query the collector check for final status
-			resp, err := c.orchestrator.QueryNodes(ctx, &pb.QueryNodesRequest{
-				WorkPlanId:    workPlanID,
-				CheckIds:      []string{"collector:results"},
-				IncludeChecks: true,
-			})
+			// Query the collector check for final status using orchestrator service
+			check, err := exec.GetCheckResult(ctx, "collector:results")
 			if err != nil {
-				// Check might not exist yet
+				// Check might not exist yet - print diagnostics periodically
+				if pollCount-lastDiagnosticAt >= 2 {
+					lastDiagnosticAt = pollCount
+					c.printDiagnostics(ctx, workPlanID)
+				}
 				continue
 			}
 
-			if len(resp.Checks) == 0 {
-				continue
-			}
-
-			check := resp.Checks[0]
-			if check.State != pb.CheckState_CHECK_STATE_FINAL {
+			if check.State != domain.CheckStateFinal {
 				// Print diagnostic every 5 seconds (2 polls at 2500ms)
 				if pollCount-lastDiagnosticAt >= 2 {
 					lastDiagnosticAt = pollCount
@@ -474,8 +431,8 @@ func (c *CIController) waitForCompletion(ctx context.Context, workPlanID string)
 			if len(check.Results) > 0 {
 				lastResult := check.Results[len(check.Results)-1]
 				if lastResult.Data != nil {
-					if v := lastResult.Data.Fields["status"]; v != nil {
-						status = v.GetStringValue()
+					if v, ok := lastResult.Data["status"].(string); ok {
+						status = v
 					}
 				}
 				if lastResult.Failure != nil {
@@ -489,61 +446,35 @@ func (c *CIController) waitForCompletion(ctx context.Context, workPlanID string)
 }
 
 func (c *CIController) printDiagnostics(ctx context.Context, workPlanID string) {
-	// Query all stages
-	stageResp, err := c.orchestrator.QueryNodes(ctx, &pb.QueryNodesRequest{
-		WorkPlanId:    workPlanID,
-		IncludeStages: true,
-	})
+	// Build progress graph
+	graph, err := progress.BuildGraph(ctx, c.orchestrator, workPlanID)
 	if err != nil {
-		log.Printf("[diag] Failed to query stages: %v", err)
+		log.Printf("[progress] Failed to build graph: %v", err)
 		return
 	}
 
-	// Count stages by state
-	stageStates := make(map[string]int)
-	var nonFinalStages []string
-	for _, stage := range stageResp.Stages {
-		stateName := stage.State.String()
-		stageStates[stateName]++
-		if stage.State != pb.StageState_STAGE_STATE_FINAL {
-			nonFinalStages = append(nonFinalStages, stage.Id)
-		}
-	}
+	// Render tree DAG
+	output := progress.RenderTreeDAG(graph)
+	log.Printf("[progress]\n%s", output)
 
-	log.Printf("[diag] Stages: total=%d states=%v", len(stageResp.Stages), stageStates)
-	if len(nonFinalStages) > 0 && len(nonFinalStages) <= 10 {
-		log.Printf("[diag] Non-final stages: %v", nonFinalStages)
-	} else if len(nonFinalStages) > 10 {
-		log.Printf("[diag] Non-final stages: %d remaining (first 10: %v)", len(nonFinalStages), nonFinalStages[:10])
+	// Show state summary
+	summary := progress.RenderStateSummary(graph)
+	if summary != "" {
+		log.Printf("[progress] %s", summary)
 	}
+}
 
-	// Query all checks
-	checkResp, err := c.orchestrator.QueryNodes(ctx, &pb.QueryNodesRequest{
-		WorkPlanId:    workPlanID,
-		IncludeChecks: true,
-	})
+func (c *CIController) printFinalResults(ctx context.Context, workPlanID string) {
+	// Build results summary
+	summary, err := progress.BuildResultsSummary(ctx, c.orchestrator, workPlanID, c.startTime)
 	if err != nil {
-		log.Printf("[diag] Failed to query checks: %v", err)
+		log.Printf("Failed to build results summary: %v", err)
 		return
 	}
 
-	// Count checks by state
-	checkStates := make(map[string]int)
-	var nonFinalChecks []string
-	for _, check := range checkResp.Checks {
-		stateName := check.State.String()
-		checkStates[stateName]++
-		if check.State != pb.CheckState_CHECK_STATE_FINAL {
-			nonFinalChecks = append(nonFinalChecks, fmt.Sprintf("\n\n  id: %s\n  kind: %s\n options: %v", check.Id, check.Id, check.Options))
-		}
-	}
-
-	log.Printf("[diag] Checks: total=%d states=%v", len(checkResp.Checks), checkStates)
-	if len(nonFinalChecks) > 0 && len(nonFinalChecks) <= 10 {
-		log.Printf("[diag] Non-final checks: %v", nonFinalChecks)
-	} else if len(nonFinalChecks) > 10 {
-		log.Printf("[diag] Non-final checks: %d remaining (first 5: %v)", len(nonFinalChecks), nonFinalChecks[:10])
-	}
+	// Render and print the summary
+	output := progress.RenderResultsSummary(summary)
+	fmt.Print(output)
 }
 
 func (c *CIController) cleanup() {

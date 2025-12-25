@@ -1,17 +1,17 @@
 {
-  "work_plan_id": "f988bb08-74c6-44fc-b200-e5d9cca86396",
-  "start_time": "2025-12-22T23:34:37-08:00",
-  "end_time": "2025-12-22T23:35:43.293833-08:00",
-  "duration": "1m6.293833s",
-  "status": "passed",
+  "work_plan_id": "09a923d5-5a20-425c-a749-691d6a206d42",
+  "start_time": "2025-12-25T13:28:24-08:00",
+  "end_time": "2025-12-25T13:29:30.347758-08:00",
+  "duration": "1m6.347758s",
+  "status": "failed",
   "summary": {
-    "total_builds": 4,
+    "total_builds": 5,
     "passed_builds": 4,
-    "failed_builds": 0,
+    "failed_builds": 1,
     "total_tests": 29,
-    "passed_tests": 6,
+    "passed_tests": 8,
     "failed_tests": 0,
-    "skipped_tests": 23,
+    "skipped_tests": 21,
     "total_e2e": 1,
     "passed_e2e": 1,
     "failed_e2e": 0,
@@ -23,28 +23,35 @@
       "binary": "./cmd/ci",
       "output": "ci",
       "success": true,
-      "duration_ms": 3023
+      "duration_ms": 940
+    },
+    {
+      "check_id": "build:ci-lint",
+      "binary": "./cmd/ci-lint",
+      "output": "ci-lint",
+      "success": true,
+      "duration_ms": 518
     },
     {
       "check_id": "build:culprit-finder",
       "binary": "./cmd/culprit-finder",
       "output": "culprit-finder",
-      "success": true,
-      "duration_ms": 3020
+      "success": false,
+      "duration_ms": 96
     },
     {
       "check_id": "build:runner-example",
       "binary": "./cmd/runner-example",
       "output": "runner-example",
       "success": true,
-      "duration_ms": 836
+      "duration_ms": 526
     },
     {
       "check_id": "build:server",
       "binary": "./cmd/server",
       "output": "server",
       "success": true,
-      "duration_ms": 3016
+      "duration_ms": 938
     }
   ],
   "test_results": [
@@ -54,7 +61,7 @@
       "passed": 10,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 2377
+      "duration_ms": 2172
     },
     {
       "check_id": "test:github.com/example/turboci-lite/client_deploy",
@@ -62,7 +69,7 @@
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 1967
+      "duration_ms": 1894
     },
     {
       "check_id": "test:github.com/example/turboci-lite/cmd/ci",
@@ -70,7 +77,23 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 842
+      "duration_ms": 942
+    },
+    {
+      "check_id": "test:github.com/example/turboci-lite/cmd/ci-lint",
+      "package": "github.com/example/turboci-lite/cmd/ci-lint",
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 617
+    },
+    {
+      "check_id": "test:github.com/example/turboci-lite/cmd/ci/progress",
+      "package": "github.com/example/turboci-lite/cmd/ci/progress",
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 634
     },
     {
       "check_id": "test:github.com/example/turboci-lite/cmd/ci/runners/builder",
@@ -78,7 +101,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 679
+      "duration_ms": 901
     },
     {
       "check_id": "test:github.com/example/turboci-lite/cmd/ci/runners/collector",
@@ -86,7 +109,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 702
+      "duration_ms": 904
     },
     {
       "check_id": "test:github.com/example/turboci-lite/cmd/ci/runners/common",
@@ -94,7 +117,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 658
+      "duration_ms": 946
     },
     {
       "check_id": "test:github.com/example/turboci-lite/cmd/ci/runners/conditional",
@@ -102,7 +125,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 831
+      "duration_ms": 939
     },
     {
       "check_id": "test:github.com/example/turboci-lite/cmd/ci/runners/materialize",
@@ -110,7 +133,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 790
+      "duration_ms": 932
     },
     {
       "check_id": "test:github.com/example/turboci-lite/cmd/ci/runners/tester",
@@ -118,7 +141,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 612
+      "duration_ms": 912
     },
     {
       "check_id": "test:github.com/example/turboci-lite/cmd/ci/runners/trigger",
@@ -126,7 +149,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 615
+      "duration_ms": 682
     },
     {
       "check_id": "test:github.com/example/turboci-lite/cmd/ci/testing",
@@ -134,39 +157,7 @@
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 2046
-    },
-    {
-      "check_id": "test:github.com/example/turboci-lite/cmd/culprit-finder",
-      "package": "github.com/example/turboci-lite/cmd/culprit-finder",
-      "passed": 0,
-      "failed": 0,
-      "skipped": 0,
-      "duration_ms": 742
-    },
-    {
-      "check_id": "test:github.com/example/turboci-lite/cmd/culprit-finder/internal/cli",
-      "package": "github.com/example/turboci-lite/cmd/culprit-finder/internal/cli",
-      "passed": 0,
-      "failed": 0,
-      "skipped": 0,
-      "duration_ms": 778
-    },
-    {
-      "check_id": "test:github.com/example/turboci-lite/cmd/culprit-finder/internal/session",
-      "package": "github.com/example/turboci-lite/cmd/culprit-finder/internal/session",
-      "passed": 0,
-      "failed": 0,
-      "skipped": 0,
-      "duration_ms": 403
-    },
-    {
-      "check_id": "test:github.com/example/turboci-lite/cmd/culprit-finder/internal/ui",
-      "package": "github.com/example/turboci-lite/cmd/culprit-finder/internal/ui",
-      "passed": 0,
-      "failed": 0,
-      "skipped": 0,
-      "duration_ms": 405
+      "duration_ms": 2291
     },
     {
       "check_id": "test:github.com/example/turboci-lite/cmd/runner-example",
@@ -174,7 +165,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 280
+      "duration_ms": 910
     },
     {
       "check_id": "test:github.com/example/turboci-lite/cmd/server",
@@ -182,7 +173,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 182
+      "duration_ms": 880
     },
     {
       "check_id": "test:github.com/example/turboci-lite/culprit/decoder",
@@ -190,7 +181,7 @@
       "passed": 99,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 959
+      "duration_ms": 1138
     },
     {
       "check_id": "test:github.com/example/turboci-lite/culprit/domain",
@@ -198,7 +189,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 480
+      "duration_ms": 638
     },
     {
       "check_id": "test:github.com/example/turboci-lite/culprit/matrix",
@@ -206,7 +197,7 @@
       "passed": 79,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 1002
+      "duration_ms": 1314
     },
     {
       "check_id": "test:github.com/example/turboci-lite/culprit/runner",
@@ -214,7 +205,7 @@
       "passed": 43,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 57924
+      "duration_ms": 57675
     },
     {
       "check_id": "test:github.com/example/turboci-lite/gen/turboci/v1",
@@ -222,7 +213,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 987
+      "duration_ms": 1066
     },
     {
       "check_id": "test:github.com/example/turboci-lite/internal/domain",
@@ -230,7 +221,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 338
+      "duration_ms": 933
     },
     {
       "check_id": "test:github.com/example/turboci-lite/internal/endpoint",
@@ -238,7 +229,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 1011
+      "duration_ms": 853
     },
     {
       "check_id": "test:github.com/example/turboci-lite/internal/service",
@@ -246,7 +237,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 800
+      "duration_ms": 1009
     },
     {
       "check_id": "test:github.com/example/turboci-lite/internal/storage",
@@ -254,7 +245,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 663
+      "duration_ms": 824
     },
     {
       "check_id": "test:github.com/example/turboci-lite/internal/storage/sqlite",
@@ -262,7 +253,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 573
+      "duration_ms": 703
     },
     {
       "check_id": "test:github.com/example/turboci-lite/internal/transport/grpc",
@@ -270,7 +261,23 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 899
+      "duration_ms": 949
+    },
+    {
+      "check_id": "test:github.com/example/turboci-lite/pkg/ci",
+      "package": "github.com/example/turboci-lite/pkg/ci",
+      "passed": 41,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 1603
+    },
+    {
+      "check_id": "test:github.com/example/turboci-lite/pkg/ci/lint",
+      "package": "github.com/example/turboci-lite/pkg/ci/lint",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 1511
     },
     {
       "check_id": "test:github.com/example/turboci-lite/pkg/id",
@@ -278,7 +285,7 @@
       "passed": 0,
       "failed": 0,
       "skipped": 0,
-      "duration_ms": 415
+      "duration_ms": 811
     }
   ],
   "e2e_results": [
@@ -289,7 +296,7 @@
       "passed": 23,
       "failed": 0,
       "skipped": false,
-      "duration_ms": 4335
+      "duration_ms": 4148
     }
   ],
   "artifacts": null

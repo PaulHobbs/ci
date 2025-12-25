@@ -13,7 +13,11 @@
       "Bash(pkill:*)",
       "Bash(make run-ci:*)",
       "Bash(timeout 45 ./bin/ci:*)",
-      "Bash(make build-ci:*)"
+      "Bash(make build-ci:*)",
+      "Bash(go get:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(make ci:*)"
     ]
   }
 }

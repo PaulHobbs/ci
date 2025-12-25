@@ -17,8 +17,6 @@ import (
 	"syscall"
 	"time"
 
-	"google.golang.org/protobuf/types/known/structpb"
-
 	pb "github.com/example/turboci-lite/gen/turboci/v1"
 	"github.com/example/turboci-lite/cmd/ci/runners/common"
 )
@@ -187,7 +185,7 @@ func (c *CollectorRunner) HandleRun(ctx context.Context, req *pb.RunRequest) (*p
 	c.printSummary(report)
 
 	// Build result data with artifact links
-	resultData, _ := structpb.NewStruct(map[string]any{
+	resultData := map[string]any{
 		"status":         report.Status,
 		"total_builds":   report.Summary.TotalBuilds,
 		"passed_builds":  report.Summary.PassedBuilds,
@@ -202,27 +200,19 @@ func (c *CollectorRunner) HandleRun(ctx context.Context, req *pb.RunRequest) (*p
 		"skipped_e2e":    report.Summary.SkippedE2E,
 		"json_report":    artifacts[0].Path,
 		"summary_report": artifacts[1].Path,
-	})
-
-	// Determine if overall result is a failure
-	var failure *pb.Failure
-	if report.Status == "failed" {
-		failure = &pb.Failure{
-			Message: fmt.Sprintf("CI failed: %d build failures, %d test failures, %d E2E failures",
-				report.Summary.FailedBuilds, report.Summary.FailedTests, report.Summary.FailedE2E),
-		}
 	}
 
-	return &pb.RunResponse{
-		StageState: pb.StageState_STAGE_STATE_FINAL,
-		CheckUpdates: []*pb.CheckUpdate{{
-			CheckId:    checkID,
-			State:      pb.CheckState_CHECK_STATE_FINAL,
-			ResultData: resultData,
-			Finalize:   true,
-			Failure:    failure,
-		}},
-	}, nil
+	// Determine if overall result is a failure
+	if report.Status == "failed" {
+		return common.NewResponse().
+			FailCheck(checkID, fmt.Sprintf("CI failed: %d build failures, %d test failures, %d E2E failures",
+				report.Summary.FailedBuilds, report.Summary.FailedTests, report.Summary.FailedE2E), resultData).
+			Build(), nil
+	}
+
+	return common.NewResponse().
+		FinalizeCheck(checkID, resultData).
+		Build(), nil
 }
 
 func (c *CollectorRunner) buildReport(workPlanID string, startTime time.Time, checks []*pb.Check) *CIReport {
@@ -540,13 +530,7 @@ func (c *CollectorRunner) printSummary(report *CIReport) {
 
 func (c *CollectorRunner) createFailureResponse(req *pb.RunRequest, msg string) (*pb.RunResponse, error) {
 	log.Printf("[collector] Error: %s", msg)
-	return &pb.RunResponse{
-		StageState: pb.StageState_STAGE_STATE_FINAL,
-		CheckUpdates: []*pb.CheckUpdate{{
-			CheckId:  req.AssignedCheckIds[0],
-			State:    pb.CheckState_CHECK_STATE_FINAL,
-			Finalize: true,
-			Failure:  &pb.Failure{Message: msg},
-		}},
-	}, nil
+	return common.NewResponse().
+		FailCheck(req.AssignedCheckIds[0], msg, nil).
+		Build(), nil
 }

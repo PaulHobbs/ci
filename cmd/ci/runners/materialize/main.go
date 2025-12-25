@@ -12,8 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"google.golang.org/protobuf/types/known/structpb"
-
 	"github.com/example/turboci-lite/cmd/ci/runners/common"
 	pb "github.com/example/turboci-lite/gen/turboci/v1"
 )
@@ -151,34 +149,15 @@ func (m *MaterializeRunner) createStages(checks []*pb.Check) ([]*pb.StageWrite, 
 }
 
 func (m *MaterializeRunner) createCollectorStage(dependsOnStages []string) *pb.StageWrite {
-	// Build dependencies on all other stages
-	var deps []*pb.Dependency
-	for _, stageID := range dependsOnStages {
-		deps = append(deps, &pb.Dependency{
-			TargetType: pb.NodeType_NODE_TYPE_STAGE,
-			TargetId:   stageID,
-		})
-	}
-
-	args, _ := structpb.NewStruct(map[string]any{
-		"start_time": time.Now().Format(time.RFC3339),
-	})
-
-	return &pb.StageWrite{
-		Id:            "stage:collector",
-		State:         pb.StageState_STAGE_STATE_PLANNED,
-		RunnerType:    "result_collector",
-		ExecutionMode: pb.ExecutionMode_EXECUTION_MODE_SYNC,
-		Args:          args,
-		Assignments: []*pb.Assignment{{
-			TargetCheckId: "collector:results",
-			GoalState:     pb.CheckState_CHECK_STATE_FINAL,
-		}},
-		Dependencies: &pb.DependencyGroup{
-			Predicate:    pb.PredicateType_PREDICATE_TYPE_AND,
-			Dependencies: deps,
-		},
-	}
+	return common.NewStage("stage:collector").
+		RunnerType("result_collector").
+		Sync().
+		Args(map[string]any{
+			"start_time": time.Now().Format(time.RFC3339),
+		}).
+		Assigns("collector:results").
+		DependsOnStages(dependsOnStages...).
+		Build()
 }
 
 func (m *MaterializeRunner) createStageForCheck(check *pb.Check, allChecks map[string]*pb.Check) (*pb.StageWrite, error) {
@@ -198,39 +177,26 @@ func (m *MaterializeRunner) createStageForCheck(check *pb.Check, allChecks map[s
 		return nil, nil
 	}
 
-	// Build stage dependencies from check dependencies
-	var stageDeps *pb.DependencyGroup
-	if check.Dependencies != nil && len(check.Dependencies.Dependencies) > 0 {
-		// Convert check dependencies to stage dependencies
-		var deps []*pb.Dependency
+	// Build stage dependencies from check dependencies (convert check deps to stage deps)
+	var stageDeps []string
+	if check.Dependencies != nil {
 		for _, checkDep := range check.Dependencies.Dependencies {
-			// The stage depends on the stage that handles the dependent check
 			if checkDep.TargetType == pb.NodeType_NODE_TYPE_CHECK {
-				deps = append(deps, &pb.Dependency{
-					TargetType: pb.NodeType_NODE_TYPE_STAGE,
-					TargetId:   fmt.Sprintf("stage:%s", checkDep.TargetId),
-				})
-			}
-		}
-		if len(deps) > 0 {
-			stageDeps = &pb.DependencyGroup{
-				Predicate:    check.Dependencies.Predicate,
-				Dependencies: deps,
+				stageDeps = append(stageDeps, fmt.Sprintf("stage:%s", checkDep.TargetId))
 			}
 		}
 	}
 
-	// For conditional tester, add dependency check IDs to args for upstream checking
-	args := check.Options
-	if check.Kind == "e2e_test" && check.Dependencies != nil {
-		// Clone args and add depends_on_checks
-		argsMap := make(map[string]any)
-		if args != nil {
-			for k, v := range args.Fields {
-				argsMap[k] = v.AsInterface()
-			}
+	// Build args map from check options
+	argsMap := make(map[string]any)
+	if check.Options != nil {
+		for k, v := range check.Options.Fields {
+			argsMap[k] = v.AsInterface()
 		}
+	}
 
+	// For conditional tester, add dependency check IDs to args for upstream checking
+	if check.Kind == "e2e_test" && check.Dependencies != nil {
 		var depCheckIDs []any
 		for _, dep := range check.Dependencies.Dependencies {
 			if dep.TargetType == pb.NodeType_NODE_TYPE_CHECK {
@@ -238,48 +204,28 @@ func (m *MaterializeRunner) createStageForCheck(check *pb.Check, allChecks map[s
 			}
 		}
 		argsMap["depends_on_checks"] = depCheckIDs
-		args, _ = structpb.NewStruct(argsMap)
 	}
 
-	return &pb.StageWrite{
-		Id:            stageID,
-		State:         pb.StageState_STAGE_STATE_PLANNED,
-		RunnerType:    runnerType,
-		ExecutionMode: pb.ExecutionMode_EXECUTION_MODE_SYNC,
-		Args:          args,
-		Assignments: []*pb.Assignment{{
-			TargetCheckId: check.Id,
-			GoalState:     pb.CheckState_CHECK_STATE_FINAL,
-		}},
-		Dependencies: stageDeps,
-	}, nil
+	return common.NewStage(stageID).
+		RunnerType(runnerType).
+		Sync().
+		Args(argsMap).
+		Assigns(check.Id).
+		DependsOnStages(stageDeps...).
+		Build(), nil
 }
 
 func (m *MaterializeRunner) createSuccessResponse(req *pb.RunRequest, stageCount int) (*pb.RunResponse, error) {
-	resultData, _ := structpb.NewStruct(map[string]any{
-		"stages_created": stageCount,
-	})
-
-	return &pb.RunResponse{
-		StageState: pb.StageState_STAGE_STATE_FINAL,
-		CheckUpdates: []*pb.CheckUpdate{{
-			CheckId:    req.AssignedCheckIds[0],
-			State:      pb.CheckState_CHECK_STATE_FINAL,
-			ResultData: resultData,
-			Finalize:   true,
-		}},
-	}, nil
+	return common.NewResponse().
+		FinalizeCheck(req.AssignedCheckIds[0], map[string]any{
+			"stages_created": stageCount,
+		}).
+		Build(), nil
 }
 
 func (m *MaterializeRunner) createFailureResponse(req *pb.RunRequest, msg string) (*pb.RunResponse, error) {
 	log.Printf("[materialize] Error: %s", msg)
-	return &pb.RunResponse{
-		StageState: pb.StageState_STAGE_STATE_FINAL,
-		CheckUpdates: []*pb.CheckUpdate{{
-			CheckId:  req.AssignedCheckIds[0],
-			State:    pb.CheckState_CHECK_STATE_FINAL,
-			Finalize: true,
-			Failure:  &pb.Failure{Message: msg},
-		}},
-	}, nil
+	return common.NewResponse().
+		FailCheck(req.AssignedCheckIds[0], msg, nil).
+		Build(), nil
 }

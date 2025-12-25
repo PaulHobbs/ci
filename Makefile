@@ -1,4 +1,4 @@
-.PHONY: proto build build-ci test clean run run-ci
+.PHONY: proto build build-ci test clean run run-ci ci
 
 # Proto generation
 proto:
@@ -45,6 +45,10 @@ run: build
 # Run CI (builds and tests this repo using turboci-lite)
 run-ci: build-ci
 	./bin/ci --verbose
+
+# Run CI using go run (builds and tests everything)
+ci:
+	go run cmd/ci/main.go
 
 # Install protoc plugins
 install-tools:

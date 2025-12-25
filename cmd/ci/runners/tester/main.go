@@ -13,11 +13,8 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
-
-	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/example/turboci-lite/cmd/ci/runners/common"
 	pb "github.com/example/turboci-lite/gen/turboci/v1"
@@ -153,7 +150,7 @@ func (t *TesterRunner) HandleRun(ctx context.Context, req *pb.RunRequest) (*pb.R
 	testFailed := err != nil || result.Failed > 0
 
 	// Build result data
-	resultData, _ := structpb.NewStruct(map[string]any{
+	resultData := map[string]any{
 		"package":     packagePath,
 		"module":      modulePath,
 		"work_dir":    workDir,
@@ -163,26 +160,20 @@ func (t *TesterRunner) HandleRun(ctx context.Context, req *pb.RunRequest) (*pb.R
 		"duration_ms": result.DurationMs,
 		"test_count":  len(result.Tests),
 		"success":     !testFailed,
-	})
+	}
 
 	log.Printf("[tester] Tests completed for %s: passed=%d failed=%d skipped=%d",
 		packagePath, result.Passed, result.Failed, result.Skipped)
 
-	var failure *pb.Failure
 	if testFailed {
-		failure = &pb.Failure{Message: fmt.Sprintf("tests failed: %d failures", result.Failed)}
+		return common.NewResponse().
+			FailCheck(checkID, fmt.Sprintf("tests failed: %d failures", result.Failed), resultData).
+			Build(), nil
 	}
 
-	return &pb.RunResponse{
-		StageState: pb.StageState_STAGE_STATE_FINAL,
-		CheckUpdates: []*pb.CheckUpdate{{
-			CheckId:    checkID,
-			State:      pb.CheckState_CHECK_STATE_FINAL,
-			ResultData: resultData,
-			Finalize:   true,
-			Failure:    failure,
-		}},
-	}, nil
+	return common.NewResponse().
+		FinalizeCheck(checkID, resultData).
+		Build(), nil
 }
 
 func (t *TesterRunner) parseTestOutput(output []byte, packagePath string) *TestResult {
@@ -250,16 +241,7 @@ func (t *TesterRunner) parseTestOutput(output []byte, packagePath string) *TestR
 
 func (t *TesterRunner) createFailureResponse(req *pb.RunRequest, msg string) (*pb.RunResponse, error) {
 	log.Printf("[tester] Error: %s", msg)
-	return &pb.RunResponse{
-		StageState: pb.StageState_STAGE_STATE_FINAL,
-		CheckUpdates: []*pb.CheckUpdate{{
-			CheckId:  req.AssignedCheckIds[0],
-			State:    pb.CheckState_CHECK_STATE_FINAL,
-			Finalize: true,
-			Failure:  &pb.Failure{Message: msg},
-		}},
-	}, nil
+	return common.NewResponse().
+		FailCheck(req.AssignedCheckIds[0], msg, nil).
+		Build(), nil
 }
-
-// Ensure we have the filepath import
-var _ = filepath.Join
