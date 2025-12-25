@@ -17,10 +17,11 @@ import (
 // Server is the gRPC server for TurboCIOrchestrator.
 type Server struct {
 	pb.UnimplementedTurboCIOrchestratorServer
-	endpoints       endpoint.Endpoints
-	runnerService   *service.RunnerService
-	callbackService *service.CallbackService
-	grpcServer      *grpc.Server
+	endpoints        endpoint.Endpoints
+	runnerService    *service.RunnerService
+	callbackService  *service.CallbackService
+	eventBroadcaster *EventBroadcaster
+	grpcServer       *grpc.Server
 }
 
 // ServerOption is a functional option for configuring the Server.
@@ -43,7 +44,8 @@ func WithCallbackService(svc *service.CallbackService) ServerOption {
 // NewServer creates a new gRPC server.
 func NewServer(endpoints endpoint.Endpoints, opts ...ServerOption) *Server {
 	s := &Server{
-		endpoints: endpoints,
+		endpoints:        endpoints,
+		eventBroadcaster: NewEventBroadcaster(),
 	}
 
 	// Apply options
@@ -57,6 +59,9 @@ func NewServer(endpoints endpoint.Endpoints, opts ...ServerOption) *Server {
 			LoggingInterceptor(),
 			RecoveryInterceptor(),
 		),
+		grpc.ChainStreamInterceptor(
+			StreamLoggingInterceptor(),
+		),
 	)
 
 	// Register the service
@@ -66,6 +71,11 @@ func NewServer(endpoints endpoint.Endpoints, opts ...ServerOption) *Server {
 	reflection.Register(s.grpcServer)
 
 	return s
+}
+
+// EventBroadcaster returns the event broadcaster for emitting events.
+func (s *Server) EventBroadcaster() *EventBroadcaster {
+	return s.eventBroadcaster
 }
 
 // Serve starts the gRPC server on the given address.
@@ -138,5 +148,28 @@ func RecoveryInterceptor() grpc.UnaryServerInterceptor {
 			}
 		}()
 		return handler(ctx, req)
+	}
+}
+
+// StreamLoggingInterceptor returns a gRPC stream interceptor that logs stream lifecycle.
+func StreamLoggingInterceptor() grpc.StreamServerInterceptor {
+	return func(
+		srv interface{},
+		ss grpc.ServerStream,
+		info *grpc.StreamServerInfo,
+		handler grpc.StreamHandler,
+	) error {
+		start := time.Now()
+		log.Printf("gRPC stream started: %s", info.FullMethod)
+
+		err := handler(srv, ss)
+
+		duration := time.Since(start)
+		if err != nil {
+			log.Printf("gRPC stream ended: %s duration=%v error=%v", info.FullMethod, duration, err)
+		} else {
+			log.Printf("gRPC stream ended: %s duration=%v", info.FullMethod, duration)
+		}
+		return err
 	}
 }

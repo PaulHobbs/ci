@@ -170,7 +170,7 @@ func (t *TesterRunner) HandleRun(ctx context.Context, req *pb.RunRequest) (*pb.R
 
 	var failure *pb.Failure
 	if testFailed {
-		failure = &pb.Failure{Message: fmt.Sprintf("tests failed: %d failures")}
+		failure = &pb.Failure{Message: fmt.Sprintf("tests failed: %d failures", result.Failed)}
 	}
 
 	return &pb.RunResponse{

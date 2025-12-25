@@ -28,6 +28,7 @@ const (
 	TurboCIOrchestrator_ListStageRunners_FullMethodName       = "/turboci.v1.TurboCIOrchestrator/ListStageRunners"
 	TurboCIOrchestrator_UpdateStageExecution_FullMethodName   = "/turboci.v1.TurboCIOrchestrator/UpdateStageExecution"
 	TurboCIOrchestrator_CompleteStageExecution_FullMethodName = "/turboci.v1.TurboCIOrchestrator/CompleteStageExecution"
+	TurboCIOrchestrator_WatchWorkPlan_FullMethodName          = "/turboci.v1.TurboCIOrchestrator/WatchWorkPlan"
 )
 
 // TurboCIOrchestratorClient is the client API for TurboCIOrchestrator service.
@@ -54,6 +55,9 @@ type TurboCIOrchestratorClient interface {
 	UpdateStageExecution(ctx context.Context, in *UpdateStageExecutionRequest, opts ...grpc.CallOption) (*UpdateStageExecutionResponse, error)
 	// CompleteStageExecution reports completion of an async execution.
 	CompleteStageExecution(ctx context.Context, in *CompleteStageExecutionRequest, opts ...grpc.CallOption) (*CompleteStageExecutionResponse, error)
+	// WatchWorkPlan streams real-time updates for a work plan.
+	// Enables reactive programming patterns without polling.
+	WatchWorkPlan(ctx context.Context, in *WatchWorkPlanRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WorkPlanEvent], error)
 }
 
 type turboCIOrchestratorClient struct {
@@ -154,6 +158,25 @@ func (c *turboCIOrchestratorClient) CompleteStageExecution(ctx context.Context, 
 	return out, nil
 }
 
+func (c *turboCIOrchestratorClient) WatchWorkPlan(ctx context.Context, in *WatchWorkPlanRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WorkPlanEvent], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &TurboCIOrchestrator_ServiceDesc.Streams[0], TurboCIOrchestrator_WatchWorkPlan_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchWorkPlanRequest, WorkPlanEvent]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type TurboCIOrchestrator_WatchWorkPlanClient = grpc.ServerStreamingClient[WorkPlanEvent]
+
 // TurboCIOrchestratorServer is the server API for TurboCIOrchestrator service.
 // All implementations must embed UnimplementedTurboCIOrchestratorServer
 // for forward compatibility.
@@ -178,6 +201,9 @@ type TurboCIOrchestratorServer interface {
 	UpdateStageExecution(context.Context, *UpdateStageExecutionRequest) (*UpdateStageExecutionResponse, error)
 	// CompleteStageExecution reports completion of an async execution.
 	CompleteStageExecution(context.Context, *CompleteStageExecutionRequest) (*CompleteStageExecutionResponse, error)
+	// WatchWorkPlan streams real-time updates for a work plan.
+	// Enables reactive programming patterns without polling.
+	WatchWorkPlan(*WatchWorkPlanRequest, grpc.ServerStreamingServer[WorkPlanEvent]) error
 	mustEmbedUnimplementedTurboCIOrchestratorServer()
 }
 
@@ -214,6 +240,9 @@ func (UnimplementedTurboCIOrchestratorServer) UpdateStageExecution(context.Conte
 }
 func (UnimplementedTurboCIOrchestratorServer) CompleteStageExecution(context.Context, *CompleteStageExecutionRequest) (*CompleteStageExecutionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CompleteStageExecution not implemented")
+}
+func (UnimplementedTurboCIOrchestratorServer) WatchWorkPlan(*WatchWorkPlanRequest, grpc.ServerStreamingServer[WorkPlanEvent]) error {
+	return status.Error(codes.Unimplemented, "method WatchWorkPlan not implemented")
 }
 func (UnimplementedTurboCIOrchestratorServer) mustEmbedUnimplementedTurboCIOrchestratorServer() {}
 func (UnimplementedTurboCIOrchestratorServer) testEmbeddedByValue()                             {}
@@ -398,6 +427,17 @@ func _TurboCIOrchestrator_CompleteStageExecution_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TurboCIOrchestrator_WatchWorkPlan_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchWorkPlanRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(TurboCIOrchestratorServer).WatchWorkPlan(m, &grpc.GenericServerStream[WatchWorkPlanRequest, WorkPlanEvent]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type TurboCIOrchestrator_WatchWorkPlanServer = grpc.ServerStreamingServer[WorkPlanEvent]
+
 // TurboCIOrchestrator_ServiceDesc is the grpc.ServiceDesc for TurboCIOrchestrator service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -442,6 +482,12 @@ var TurboCIOrchestrator_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _TurboCIOrchestrator_CompleteStageExecution_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "WatchWorkPlan",
+			Handler:       _TurboCIOrchestrator_WatchWorkPlan_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "turboci/v1/service.proto",
 }

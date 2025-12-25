@@ -44,6 +44,12 @@ service TurboCIOrchestrator {
 
   // CompleteStageExecution reports completion of an async execution.
   rpc CompleteStageExecution(CompleteStageExecutionRequest) returns (CompleteStageExecutionResponse);
+
+  // === Real-time Event Streaming ===
+
+  // WatchWorkPlan streams real-time updates for a work plan.
+  // Enables reactive programming patterns without polling.
+  rpc WatchWorkPlan(WatchWorkPlanRequest) returns (stream WorkPlanEvent);
 }
 
 // WriteNodesRequest atomically writes multiple checks and stages.
@@ -209,4 +215,85 @@ message CompleteStageExecutionRequest {
 message CompleteStageExecutionResponse {
   // Acknowledgment
   bool acknowledged = 1;
+}
+
+// === Real-time Event Streaming Messages ===
+
+// WatchWorkPlanRequest subscribes to real-time updates for a work plan.
+message WatchWorkPlanRequest {
+  // WorkPlan to watch
+  string work_plan_id = 1;
+
+  // Include check events in the stream
+  bool include_checks = 2;
+
+  // Include stage events in the stream
+  bool include_stages = 3;
+
+  // Filter to specific check states (empty = all states)
+  repeated CheckState check_state_filter = 4;
+
+  // Filter to specific stage states (empty = all states)
+  repeated StageState stage_state_filter = 5;
+
+  // Filter to specific check IDs (empty = all checks)
+  repeated string check_id_filter = 6;
+
+  // Filter to specific stage IDs (empty = all stages)
+  repeated string stage_id_filter = 7;
+}
+
+// WorkPlanEvent represents a state change in a work plan.
+message WorkPlanEvent {
+  // Timestamp when the event occurred
+  google.protobuf.Timestamp timestamp = 1;
+
+  // The event payload
+  oneof event {
+    CheckEvent check_event = 2;
+    StageEvent stage_event = 3;
+    WorkPlanCompletedEvent completed_event = 4;
+  }
+}
+
+// CheckEvent represents a state change in a check.
+message CheckEvent {
+  // The check ID
+  string check_id = 1;
+
+  // Previous state (may be UNKNOWN for creation events)
+  CheckState old_state = 2;
+
+  // New state
+  CheckState new_state = 3;
+
+  // Full check object (if client wants details)
+  Check check = 4;
+}
+
+// StageEvent represents a state change in a stage.
+message StageEvent {
+  // The stage ID
+  string stage_id = 1;
+
+  // Previous state (may be UNKNOWN for creation events)
+  StageState old_state = 2;
+
+  // New state
+  StageState new_state = 3;
+
+  // Full stage object (if client wants details)
+  Stage stage = 4;
+}
+
+// WorkPlanCompletedEvent is sent when the entire work plan is complete.
+message WorkPlanCompletedEvent {
+  // Number of checks in final state
+  int32 checks_completed = 1;
+
+  // Number of stages in final state
+  int32 stages_completed = 2;
+
+  // Whether any failures occurred
+  bool has_failures = 3;
 }

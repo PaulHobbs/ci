@@ -1,6 +1,6 @@
 ---
 name: turboci-lite
-description: Documentation for the TurboCI-Lite workflow orchestration service. Use when working with turboci-lite code, understanding its architecture, modifying the gRPC service, working with workflow stages/checks, or debugging the orchestrator.
+description: Documentation for the TurboCI-Lite workflow orchestration service. Use when working with turboci-lite code, understanding its architecture, modifying the gRPC service, working with workflow stages/checks, using the pkg/ci DAG API, or debugging the orchestrator.
 ---
 
 # TurboCI-Lite Service
@@ -163,8 +163,16 @@ turboci-lite/
 │   └── common.proto            # Shared enums (includes ExecutionMode)
 ├── client/
 │   └── pipeline.go             # High-level pipeline runner (legacy)
-├── pkg/id/
-│   └── generator.go            # UUID generation
+├── pkg/
+│   ├── id/
+│   │   └── generator.go        # UUID generation
+│   └── ci/                     # High-level developer API
+│       ├── helpers.go          # Level 1: Thin syntax helpers
+│       ├── builders.go         # Level 2: Fluent builders
+│       ├── workflow.go         # Level 3: Async futures
+│       ├── dag.go              # Level 4: Declarative DAG DSL
+│       └── lint/               # Static analysis linter
+│           └── analyzer.go
 ├── go.mod
 └── Makefile
 ```
@@ -460,4 +468,432 @@ cd testing/e2e && go test -v
 
 # Run specific test
 go test -v -run TestBasicSyncExecution
+```
+
+---
+
+## pkg/ci - High-Level Developer API
+
+The `pkg/ci` package provides a simplified developer API for TurboCI-Lite workflows. It offers four abstraction levels that reduce boilerplate while maintaining full control when needed.
+
+```
+pkg/ci/
+├── helpers.go      # Level 1: Thin syntax helpers
+├── builders.go     # Level 2: Fluent builders
+├── workflow.go     # Level 3: Async futures with streaming
+├── dag.go          # Level 4: Declarative DAG DSL
+└── lint/           # Static analysis linter
+```
+
+### Abstraction Levels Comparison
+
+| Feature | L1 Helpers | L2 Builder | L3 Futures | L4 DAG |
+|---------|------------|------------|------------|--------|
+| Boilerplate Reduction | 10% | 40% | 60% | 80% |
+| Learning Curve | None | Low | Medium | Medium |
+| Control Retained | 100% | 100% | 90% | 70% |
+| Dynamic Node Creation | Yes | Yes | Yes | Yes (hybrid) |
+| Async/Await Style | No | No | Yes | Yes |
+
+All levels are **composable** - you can mix and match, escaping to lower levels when needed.
+
+---
+
+### Level 1: Helpers (helpers.go)
+
+Thin syntax sugar that reduces noise while keeping the same mental model.
+
+```go
+import "github.com/example/turboci-lite/pkg/ci"
+
+// Before: Verbose dependency construction
+deps := &domain.DependencyGroup{
+    Predicate: domain.PredicateAND,
+    Dependencies: []domain.DependencyRef{
+        {TargetType: domain.NodeTypeCheck, TargetID: "build:main"},
+    },
+}
+
+// After: Clean helper functions
+deps := ci.DependsOn(ci.Check("build:main"))
+```
+
+**Available Helpers:**
+
+| Function | Description |
+|----------|-------------|
+| `Ptr[T](v T) *T` | Generic pointer helper |
+| `Check(id string) NodeRef` | Reference to a check node |
+| `Stage(id string) NodeRef` | Reference to a stage node |
+| `DependsOn(refs ...NodeRef) *DependencyGroup` | AND dependency group |
+| `DependsOnAny(refs ...NodeRef) *DependencyGroup` | OR dependency group |
+| `DependsOnChecks(ids ...string) *DependencyGroup` | AND deps from check IDs |
+| `DependsOnStages(ids ...string) *DependencyGroup` | AND deps from stage IDs |
+| `Assigns(checkID string) Assignment` | Assignment with FINAL goal |
+| `AssignsWithGoal(checkID string, goal CheckState) Assignment` | Custom goal state |
+| `AssignmentList(assignments ...Assignment) []Assignment` | Build assignment slice |
+
+---
+
+### Level 2: Builders (builders.go)
+
+Fluent builder pattern for constructing CheckWrite and StageWrite objects with validation.
+
+#### CheckBuilder
+
+```go
+import "github.com/example/turboci-lite/pkg/ci"
+
+// Build a check with all options
+check := ci.NewCheck("build:main").
+    Kind("build").
+    State(domain.CheckStatePlanning).
+    Option("target", "//pkg/...").
+    DependsOn("plan:main").
+    Build()
+
+// Use in WriteNodes request
+req.Checks = append(req.Checks, check)
+```
+
+**CheckBuilder Methods:**
+
+| Method | Description |
+|--------|-------------|
+| `NewCheck(id string) *CheckBuilder` | Create builder (panics if empty) |
+| `Kind(kind string)` | Set check kind |
+| `State(state CheckState)` | Set initial state |
+| `Planning()` / `Planned()` / `Waiting()` / `Final()` | State shortcuts |
+| `Options(opts map[string]any)` | Set all options |
+| `Option(key string, value any)` | Set single option |
+| `DependsOn(checkIDs ...string)` | AND dependencies on checks |
+| `DependsOnAny(checkIDs ...string)` | OR dependencies on checks |
+| `Build() *service.CheckWrite` | Build final object |
+
+#### StageBuilder
+
+```go
+// Build a stage with runner and assignments
+stage := ci.NewStage("exec:build").
+    RunnerType("builder").
+    Sync().
+    Arg("target", "//pkg/...").
+    Assigns("build:main").
+    DependsOnStages("exec:plan").
+    Build()
+```
+
+**StageBuilder Methods:**
+
+| Method | Description |
+|--------|-------------|
+| `NewStage(id string) *StageBuilder` | Create builder (panics if empty) |
+| `RunnerType(rt string)` | Set runner type (required) |
+| `Sync()` / `Async()` | Set execution mode |
+| `State(state StageState)` | Set initial state |
+| `Args(args map[string]any)` | Set all args |
+| `Arg(key string, value any)` | Set single arg |
+| `Assigns(checkID string)` | Assign check with FINAL goal |
+| `AssignsWithGoal(checkID string, goal CheckState)` | Custom goal |
+| `AssignsAll(assignments ...Assignment)` | Multiple assignments |
+| `DependsOnStages(stageIDs ...string)` | Depend on stages |
+| `DependsOnChecks(checkIDs ...string)` | Depend on checks |
+| `Build() *service.StageWrite` | Build final object |
+
+#### AttemptBuilder
+
+```go
+// Build an attempt update
+attempt := ci.NewAttempt("attempt-1").
+    Running().
+    Progress(50, "Building...").
+    Build()
+```
+
+---
+
+### Level 3: Workflow Context (workflow.go)
+
+Imperative async programming with futures. Hides polling behind clean Wait APIs.
+
+```go
+import "github.com/example/turboci-lite/pkg/ci"
+
+// Create workflow context (connects to orchestrator)
+wf, err := ci.NewWorkflowContext(ctx, orchestrator, grpcClient, workPlanID)
+
+// Define checks - returns handles for async waiting
+buildCheck, _ := wf.DefineCheck(ctx, "build:main",
+    ci.WithKind("build"),
+    ci.WithCheckState(domain.CheckStatePlanning),
+)
+
+testCheck, _ := wf.DefineCheck(ctx, "test:unit",
+    ci.WithKind("test"),
+    ci.WithCheckDeps("build:main"),
+)
+
+// Define stages
+buildStage, _ := wf.DefineStage(ctx, "exec:build",
+    ci.WithRunner("builder"),
+    ci.WithSync(),
+    ci.AssignsTo("build:main"),
+)
+
+// Wait for completion (uses streaming with polling fallback)
+result, err := buildCheck.Wait(ctx)
+
+// Or wait with timeout
+result, err := buildCheck.WaitWithTimeout(ctx, 5*time.Minute)
+
+// Parallel waiting
+err := ci.WaitAllChecks(ctx, buildCheck, testCheck)
+err := ci.WaitAllStages(ctx, buildStage, testStage)
+
+// Race - wait for first completion
+check, err := ci.WaitAnyCheck(ctx, check1, check2, check3)
+```
+
+**Functional Options:**
+
+| Option | Description |
+|--------|-------------|
+| `WithKind(kind string)` | Set check kind |
+| `WithCheckState(state CheckState)` | Set check state |
+| `WithCheckDeps(checkIDs ...string)` | Check dependencies |
+| `WithRunner(runnerType string)` | Set runner type |
+| `WithSync()` / `WithAsync()` | Execution mode |
+| `WithStageState(state StageState)` | Set stage state |
+| `WithStageDeps(stageIDs ...string)` | Stage dependencies |
+| `AssignsTo(checkIDs ...string)` | Assign to checks |
+
+---
+
+### Level 4: DAG Builder (dag.go)
+
+Declarative workflow definition with hybrid dynamic mode. Define your workflow as a graph, then execute it.
+
+#### Static Workflow (Define Before Execute)
+
+```go
+import "github.com/example/turboci-lite/pkg/ci"
+
+// Create DAG
+dag := ci.NewDAG()
+
+// Define checks (returns nodes for dependency references)
+planCheck := dag.Check("plan").Kind("plan")
+buildCheck := dag.Check("build").Kind("build").DependsOn(planCheck)
+testCheck := dag.Check("test").Kind("test").DependsOn(buildCheck)
+
+// Define stages
+planStage := dag.Stage("plan-stage").Runner("planner").Assigns(planCheck)
+buildStage := dag.Stage("build-stage").Runner("builder").Assigns(buildCheck).After(planStage)
+testStage := dag.Stage("test-stage").Runner("tester").Assigns(testCheck).After(buildStage)
+
+// Execute the DAG
+exec, err := dag.Execute(ctx, orchestrator)
+if err != nil {
+    return err
+}
+
+// Wait for completion
+err = exec.WaitForCompletion(ctx)
+
+// Or wait for specific nodes
+check, err := exec.WaitForCheck(ctx, "build")
+stage, err := exec.WaitForStage(ctx, "build-stage")
+```
+
+#### Dynamic Workflow (Add Nodes During Execution)
+
+The DAG supports **hybrid mode** - add nodes dynamically after execution starts:
+
+```go
+dag := ci.NewDAG()
+
+// Initial planning phase
+planCheck := dag.Check("plan").Kind("plan")
+planStage := dag.Stage("plan").Runner("planner").Assigns(planCheck)
+
+// Start execution
+exec, _ := dag.Execute(ctx, orchestrator)
+
+// Wait for planning to complete
+planResult, _ := exec.WaitForCheck(ctx, "plan")
+
+// Dynamically add build checks based on plan result
+targets := planResult.Options["targets"].([]string)
+for _, target := range targets {
+    // AddCheck works after Execute - writes immediately to orchestrator
+    buildCheck, _ := dag.AddCheck(ctx, "build:"+target)
+    buildCheck.Kind("build").DependsOn(planCheck)
+
+    buildStage, _ := dag.AddStage(ctx, "exec:build:"+target)
+    buildStage.Runner("builder").Assigns(buildCheck).After(planStage)
+}
+
+// Wait for all dynamic work to complete
+exec.WaitForCompletion(ctx)
+```
+
+#### CheckNode Methods
+
+| Method | Description |
+|--------|-------------|
+| `dag.Check(id string) *CheckNode` | Create check node |
+| `Kind(kind string) *CheckNode` | Set kind |
+| `State(state CheckState) *CheckNode` | Set state |
+| `Option(key string, value any) *CheckNode` | Set option |
+| `DependsOn(checks ...*CheckNode) *CheckNode` | Add check dependencies |
+
+#### StageNode Methods
+
+| Method | Description |
+|--------|-------------|
+| `dag.Stage(id string) *StageNode` | Create stage node |
+| `Runner(runnerType string) *StageNode` | Set runner (required) |
+| `Sync() / Async() *StageNode` | Execution mode |
+| `Arg(key string, value any) *StageNode` | Set arg |
+| `Assigns(checks ...*CheckNode) *StageNode` | Assign to checks |
+| `After(stages ...*StageNode) *StageNode` | Depend on stages |
+| `AfterChecks(checks ...*CheckNode) *StageNode` | Depend on checks |
+
+#### WorkflowExecution Methods
+
+| Method | Description |
+|--------|-------------|
+| `WaitForCompletion(ctx) error` | Wait for all nodes |
+| `WaitForCheck(ctx, id) (*domain.Check, error)` | Wait for specific check |
+| `WaitForStage(ctx, id) (*domain.Stage, error)` | Wait for specific stage |
+
+---
+
+### Static Analysis Linter (pkg/ci/lint)
+
+Catch common mistakes at build time with the `cilint` analyzer.
+
+**Detected Issues:**
+
+| Rule | Detects |
+|------|---------|
+| Empty ID | `ci.NewCheck("")` - will panic at runtime |
+| Empty dependencies | `ci.DependsOn()` - no-op call |
+| Duplicate dependencies | `ci.DependsOn("a", "b", "a")` |
+
+**Installation and Usage:**
+
+```bash
+# Install the linter
+go install github.com/example/turboci-lite/cmd/ci-lint@latest
+
+# Run on your code
+ci-lint ./...
+
+# Or with golangci-lint (.golangci.yml)
+linters:
+  enable:
+    - cilint
+```
+
+**Example Output:**
+
+```
+pkg/myworkflow/pipeline.go:42:15: NewCheck called with empty string literal - will panic at runtime
+pkg/myworkflow/pipeline.go:58:2: DependsOn called with no arguments - this is a no-op
+```
+
+---
+
+### Complete Example: CI Pipeline with DAG
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+
+    "github.com/example/turboci-lite/pkg/ci"
+    "github.com/example/turboci-lite/internal/service"
+)
+
+func RunCIPipeline(ctx context.Context, orch *service.OrchestratorService) error {
+    dag := ci.NewDAG()
+
+    // Phase 1: Planning
+    planCheck := dag.Check("plan").Kind("plan")
+    planStage := dag.Stage("plan").
+        Runner("planner").
+        Sync().
+        Assigns(planCheck)
+
+    // Phase 2: Build (depends on plan)
+    buildCheck := dag.Check("build").Kind("build").DependsOn(planCheck)
+    buildStage := dag.Stage("build").
+        Runner("builder").
+        Async().
+        Arg("parallelism", 4).
+        Assigns(buildCheck).
+        After(planStage)
+
+    // Phase 3: Test (depends on build)
+    testCheck := dag.Check("test").Kind("test").DependsOn(buildCheck)
+    testStage := dag.Stage("test").
+        Runner("tester").
+        Async().
+        Assigns(testCheck).
+        After(buildStage)
+
+    // Phase 4: Deploy (depends on test)
+    deployCheck := dag.Check("deploy").Kind("deploy").DependsOn(testCheck)
+    deployStage := dag.Stage("deploy").
+        Runner("deployer").
+        Sync().
+        Assigns(deployCheck).
+        After(testStage)
+
+    // Execute
+    exec, err := dag.Execute(ctx, orch)
+    if err != nil {
+        return err
+    }
+
+    // Wait for completion
+    if err := exec.WaitForCompletion(ctx); err != nil {
+        return err
+    }
+
+    // Check results
+    deployResult, _ := exec.WaitForCheck(ctx, "deploy")
+    log.Printf("Deploy completed: %v", deployResult.State)
+
+    return nil
+}
+```
+
+### Mixing Abstraction Levels
+
+You can escape to lower levels when needed:
+
+```go
+// Use DAG for structure
+dag := ci.NewDAG()
+planCheck := dag.Check("plan").Kind("plan")
+
+// Execute DAG
+exec, _ := dag.Execute(ctx, orch)
+
+// Escape to Level 2 builders for custom nodes
+customCheck := ci.NewCheck("custom:special").
+    Kind("custom").
+    Option("special_config", map[string]any{"key": "value"}).
+    DependsOn("plan").
+    Build()
+
+// Write directly via orchestrator
+orch.WriteNodes(ctx, &service.WriteNodesRequest{
+    WorkPlanID: exec.WorkPlanID(),
+    Checks:     []*service.CheckWrite{customCheck},
+})
 ```

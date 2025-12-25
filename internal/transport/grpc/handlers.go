@@ -601,3 +601,30 @@ func stageRunnerToProto(r *domain.StageRunner) *pb.StageRunnerInfo {
 		ExpiresAt:      timestamppb.New(r.ExpiresAt),
 	}
 }
+
+// WatchWorkPlan implements the WatchWorkPlan streaming RPC.
+func (s *Server) WatchWorkPlan(req *pb.WatchWorkPlanRequest, stream pb.TurboCIOrchestrator_WatchWorkPlanServer) error {
+	// Validate work plan exists
+	_, err := s.endpoints.GetWorkPlan(stream.Context(), req.GetWorkPlanId())
+	if err != nil {
+		return endpoint.MapErrorToStatus(err)
+	}
+
+	// Subscribe to events
+	sub := s.eventBroadcaster.Subscribe(req)
+	defer s.eventBroadcaster.Unsubscribe(sub)
+
+	// Stream events until context is cancelled or stream is closed
+	for {
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		case <-sub.Done:
+			return nil
+		case event := <-sub.Events:
+			if err := stream.Send(event); err != nil {
+				return err
+			}
+		}
+	}
+}

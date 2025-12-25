@@ -114,6 +114,11 @@ func (m *MockOrchestratorClient) CompleteStageExecution(ctx context.Context, in 
 	return &pb.CompleteStageExecutionResponse{}, nil
 }
 
+func (m *MockOrchestratorClient) WatchWorkPlan(ctx context.Context, in *pb.WatchWorkPlanRequest, opts ...grpc.CallOption) (pb.TurboCIOrchestrator_WatchWorkPlanClient, error) {
+	// Return nil - mock doesn't support streaming
+	return nil, nil
+}
+
 // GetWriteNodesCallCount returns the number of WriteNodes calls.
 func (m *MockOrchestratorClient) GetWriteNodesCallCount() int {
 	m.mu.Lock()

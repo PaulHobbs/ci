@@ -986,6 +986,426 @@ func (x *CompleteStageExecutionResponse) GetAcknowledged() bool {
 	return false
 }
 
+// WatchWorkPlanRequest subscribes to real-time updates for a work plan.
+type WatchWorkPlanRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// WorkPlan to watch
+	WorkPlanId string `protobuf:"bytes,1,opt,name=work_plan_id,json=workPlanId,proto3" json:"work_plan_id,omitempty"`
+	// Include check events in the stream
+	IncludeChecks bool `protobuf:"varint,2,opt,name=include_checks,json=includeChecks,proto3" json:"include_checks,omitempty"`
+	// Include stage events in the stream
+	IncludeStages bool `protobuf:"varint,3,opt,name=include_stages,json=includeStages,proto3" json:"include_stages,omitempty"`
+	// Filter to specific check states (empty = all states)
+	CheckStateFilter []CheckState `protobuf:"varint,4,rep,packed,name=check_state_filter,json=checkStateFilter,proto3,enum=turboci.v1.CheckState" json:"check_state_filter,omitempty"`
+	// Filter to specific stage states (empty = all states)
+	StageStateFilter []StageState `protobuf:"varint,5,rep,packed,name=stage_state_filter,json=stageStateFilter,proto3,enum=turboci.v1.StageState" json:"stage_state_filter,omitempty"`
+	// Filter to specific check IDs (empty = all checks)
+	CheckIdFilter []string `protobuf:"bytes,6,rep,name=check_id_filter,json=checkIdFilter,proto3" json:"check_id_filter,omitempty"`
+	// Filter to specific stage IDs (empty = all stages)
+	StageIdFilter []string `protobuf:"bytes,7,rep,name=stage_id_filter,json=stageIdFilter,proto3" json:"stage_id_filter,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchWorkPlanRequest) Reset() {
+	*x = WatchWorkPlanRequest{}
+	mi := &file_turboci_v1_service_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchWorkPlanRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchWorkPlanRequest) ProtoMessage() {}
+
+func (x *WatchWorkPlanRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchWorkPlanRequest.ProtoReflect.Descriptor instead.
+func (*WatchWorkPlanRequest) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *WatchWorkPlanRequest) GetWorkPlanId() string {
+	if x != nil {
+		return x.WorkPlanId
+	}
+	return ""
+}
+
+func (x *WatchWorkPlanRequest) GetIncludeChecks() bool {
+	if x != nil {
+		return x.IncludeChecks
+	}
+	return false
+}
+
+func (x *WatchWorkPlanRequest) GetIncludeStages() bool {
+	if x != nil {
+		return x.IncludeStages
+	}
+	return false
+}
+
+func (x *WatchWorkPlanRequest) GetCheckStateFilter() []CheckState {
+	if x != nil {
+		return x.CheckStateFilter
+	}
+	return nil
+}
+
+func (x *WatchWorkPlanRequest) GetStageStateFilter() []StageState {
+	if x != nil {
+		return x.StageStateFilter
+	}
+	return nil
+}
+
+func (x *WatchWorkPlanRequest) GetCheckIdFilter() []string {
+	if x != nil {
+		return x.CheckIdFilter
+	}
+	return nil
+}
+
+func (x *WatchWorkPlanRequest) GetStageIdFilter() []string {
+	if x != nil {
+		return x.StageIdFilter
+	}
+	return nil
+}
+
+// WorkPlanEvent represents a state change in a work plan.
+type WorkPlanEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Timestamp when the event occurred
+	Timestamp *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	// The event payload
+	//
+	// Types that are valid to be assigned to Event:
+	//
+	//	*WorkPlanEvent_CheckEvent
+	//	*WorkPlanEvent_StageEvent
+	//	*WorkPlanEvent_CompletedEvent
+	Event         isWorkPlanEvent_Event `protobuf_oneof:"event"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkPlanEvent) Reset() {
+	*x = WorkPlanEvent{}
+	mi := &file_turboci_v1_service_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkPlanEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkPlanEvent) ProtoMessage() {}
+
+func (x *WorkPlanEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkPlanEvent.ProtoReflect.Descriptor instead.
+func (*WorkPlanEvent) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *WorkPlanEvent) GetTimestamp() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Timestamp
+	}
+	return nil
+}
+
+func (x *WorkPlanEvent) GetEvent() isWorkPlanEvent_Event {
+	if x != nil {
+		return x.Event
+	}
+	return nil
+}
+
+func (x *WorkPlanEvent) GetCheckEvent() *CheckEvent {
+	if x != nil {
+		if x, ok := x.Event.(*WorkPlanEvent_CheckEvent); ok {
+			return x.CheckEvent
+		}
+	}
+	return nil
+}
+
+func (x *WorkPlanEvent) GetStageEvent() *StageEvent {
+	if x != nil {
+		if x, ok := x.Event.(*WorkPlanEvent_StageEvent); ok {
+			return x.StageEvent
+		}
+	}
+	return nil
+}
+
+func (x *WorkPlanEvent) GetCompletedEvent() *WorkPlanCompletedEvent {
+	if x != nil {
+		if x, ok := x.Event.(*WorkPlanEvent_CompletedEvent); ok {
+			return x.CompletedEvent
+		}
+	}
+	return nil
+}
+
+type isWorkPlanEvent_Event interface {
+	isWorkPlanEvent_Event()
+}
+
+type WorkPlanEvent_CheckEvent struct {
+	CheckEvent *CheckEvent `protobuf:"bytes,2,opt,name=check_event,json=checkEvent,proto3,oneof"`
+}
+
+type WorkPlanEvent_StageEvent struct {
+	StageEvent *StageEvent `protobuf:"bytes,3,opt,name=stage_event,json=stageEvent,proto3,oneof"`
+}
+
+type WorkPlanEvent_CompletedEvent struct {
+	CompletedEvent *WorkPlanCompletedEvent `protobuf:"bytes,4,opt,name=completed_event,json=completedEvent,proto3,oneof"`
+}
+
+func (*WorkPlanEvent_CheckEvent) isWorkPlanEvent_Event() {}
+
+func (*WorkPlanEvent_StageEvent) isWorkPlanEvent_Event() {}
+
+func (*WorkPlanEvent_CompletedEvent) isWorkPlanEvent_Event() {}
+
+// CheckEvent represents a state change in a check.
+type CheckEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The check ID
+	CheckId string `protobuf:"bytes,1,opt,name=check_id,json=checkId,proto3" json:"check_id,omitempty"`
+	// Previous state (may be UNKNOWN for creation events)
+	OldState CheckState `protobuf:"varint,2,opt,name=old_state,json=oldState,proto3,enum=turboci.v1.CheckState" json:"old_state,omitempty"`
+	// New state
+	NewState CheckState `protobuf:"varint,3,opt,name=new_state,json=newState,proto3,enum=turboci.v1.CheckState" json:"new_state,omitempty"`
+	// Full check object (if client wants details)
+	Check         *Check `protobuf:"bytes,4,opt,name=check,proto3" json:"check,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckEvent) Reset() {
+	*x = CheckEvent{}
+	mi := &file_turboci_v1_service_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckEvent) ProtoMessage() {}
+
+func (x *CheckEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckEvent.ProtoReflect.Descriptor instead.
+func (*CheckEvent) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *CheckEvent) GetCheckId() string {
+	if x != nil {
+		return x.CheckId
+	}
+	return ""
+}
+
+func (x *CheckEvent) GetOldState() CheckState {
+	if x != nil {
+		return x.OldState
+	}
+	return CheckState_CHECK_STATE_UNKNOWN
+}
+
+func (x *CheckEvent) GetNewState() CheckState {
+	if x != nil {
+		return x.NewState
+	}
+	return CheckState_CHECK_STATE_UNKNOWN
+}
+
+func (x *CheckEvent) GetCheck() *Check {
+	if x != nil {
+		return x.Check
+	}
+	return nil
+}
+
+// StageEvent represents a state change in a stage.
+type StageEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The stage ID
+	StageId string `protobuf:"bytes,1,opt,name=stage_id,json=stageId,proto3" json:"stage_id,omitempty"`
+	// Previous state (may be UNKNOWN for creation events)
+	OldState StageState `protobuf:"varint,2,opt,name=old_state,json=oldState,proto3,enum=turboci.v1.StageState" json:"old_state,omitempty"`
+	// New state
+	NewState StageState `protobuf:"varint,3,opt,name=new_state,json=newState,proto3,enum=turboci.v1.StageState" json:"new_state,omitempty"`
+	// Full stage object (if client wants details)
+	Stage         *Stage `protobuf:"bytes,4,opt,name=stage,proto3" json:"stage,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StageEvent) Reset() {
+	*x = StageEvent{}
+	mi := &file_turboci_v1_service_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StageEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StageEvent) ProtoMessage() {}
+
+func (x *StageEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StageEvent.ProtoReflect.Descriptor instead.
+func (*StageEvent) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *StageEvent) GetStageId() string {
+	if x != nil {
+		return x.StageId
+	}
+	return ""
+}
+
+func (x *StageEvent) GetOldState() StageState {
+	if x != nil {
+		return x.OldState
+	}
+	return StageState_STAGE_STATE_UNKNOWN
+}
+
+func (x *StageEvent) GetNewState() StageState {
+	if x != nil {
+		return x.NewState
+	}
+	return StageState_STAGE_STATE_UNKNOWN
+}
+
+func (x *StageEvent) GetStage() *Stage {
+	if x != nil {
+		return x.Stage
+	}
+	return nil
+}
+
+// WorkPlanCompletedEvent is sent when the entire work plan is complete.
+type WorkPlanCompletedEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Number of checks in final state
+	ChecksCompleted int32 `protobuf:"varint,1,opt,name=checks_completed,json=checksCompleted,proto3" json:"checks_completed,omitempty"`
+	// Number of stages in final state
+	StagesCompleted int32 `protobuf:"varint,2,opt,name=stages_completed,json=stagesCompleted,proto3" json:"stages_completed,omitempty"`
+	// Whether any failures occurred
+	HasFailures   bool `protobuf:"varint,3,opt,name=has_failures,json=hasFailures,proto3" json:"has_failures,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkPlanCompletedEvent) Reset() {
+	*x = WorkPlanCompletedEvent{}
+	mi := &file_turboci_v1_service_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkPlanCompletedEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkPlanCompletedEvent) ProtoMessage() {}
+
+func (x *WorkPlanCompletedEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_turboci_v1_service_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkPlanCompletedEvent.ProtoReflect.Descriptor instead.
+func (*WorkPlanCompletedEvent) Descriptor() ([]byte, []int) {
+	return file_turboci_v1_service_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *WorkPlanCompletedEvent) GetChecksCompleted() int32 {
+	if x != nil {
+		return x.ChecksCompleted
+	}
+	return 0
+}
+
+func (x *WorkPlanCompletedEvent) GetStagesCompleted() int32 {
+	if x != nil {
+		return x.StagesCompleted
+	}
+	return 0
+}
+
+func (x *WorkPlanCompletedEvent) GetHasFailures() bool {
+	if x != nil {
+		return x.HasFailures
+	}
+	return false
+}
+
 var File_turboci_v1_service_proto protoreflect.FileDescriptor
 
 const file_turboci_v1_service_proto_rawDesc = "" +
@@ -1069,7 +1489,40 @@ const file_turboci_v1_service_proto_rawDesc = "" +
 	"\afailure\x18\x04 \x01(\v2\x13.turboci.v1.FailureR\afailure\x121\n" +
 	"\adetails\x18\x05 \x01(\v2\x17.google.protobuf.StructR\adetails\"D\n" +
 	"\x1eCompleteStageExecutionResponse\x12\"\n" +
-	"\facknowledged\x18\x01 \x01(\bR\facknowledged2\xe9\x06\n" +
+	"\facknowledged\x18\x01 \x01(\bR\facknowledged\"\xe2\x02\n" +
+	"\x14WatchWorkPlanRequest\x12 \n" +
+	"\fwork_plan_id\x18\x01 \x01(\tR\n" +
+	"workPlanId\x12%\n" +
+	"\x0einclude_checks\x18\x02 \x01(\bR\rincludeChecks\x12%\n" +
+	"\x0einclude_stages\x18\x03 \x01(\bR\rincludeStages\x12D\n" +
+	"\x12check_state_filter\x18\x04 \x03(\x0e2\x16.turboci.v1.CheckStateR\x10checkStateFilter\x12D\n" +
+	"\x12stage_state_filter\x18\x05 \x03(\x0e2\x16.turboci.v1.StageStateR\x10stageStateFilter\x12&\n" +
+	"\x0fcheck_id_filter\x18\x06 \x03(\tR\rcheckIdFilter\x12&\n" +
+	"\x0fstage_id_filter\x18\a \x03(\tR\rstageIdFilter\"\x97\x02\n" +
+	"\rWorkPlanEvent\x128\n" +
+	"\ttimestamp\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x129\n" +
+	"\vcheck_event\x18\x02 \x01(\v2\x16.turboci.v1.CheckEventH\x00R\n" +
+	"checkEvent\x129\n" +
+	"\vstage_event\x18\x03 \x01(\v2\x16.turboci.v1.StageEventH\x00R\n" +
+	"stageEvent\x12M\n" +
+	"\x0fcompleted_event\x18\x04 \x01(\v2\".turboci.v1.WorkPlanCompletedEventH\x00R\x0ecompletedEventB\a\n" +
+	"\x05event\"\xba\x01\n" +
+	"\n" +
+	"CheckEvent\x12\x19\n" +
+	"\bcheck_id\x18\x01 \x01(\tR\acheckId\x123\n" +
+	"\told_state\x18\x02 \x01(\x0e2\x16.turboci.v1.CheckStateR\boldState\x123\n" +
+	"\tnew_state\x18\x03 \x01(\x0e2\x16.turboci.v1.CheckStateR\bnewState\x12'\n" +
+	"\x05check\x18\x04 \x01(\v2\x11.turboci.v1.CheckR\x05check\"\xba\x01\n" +
+	"\n" +
+	"StageEvent\x12\x19\n" +
+	"\bstage_id\x18\x01 \x01(\tR\astageId\x123\n" +
+	"\told_state\x18\x02 \x01(\x0e2\x16.turboci.v1.StageStateR\boldState\x123\n" +
+	"\tnew_state\x18\x03 \x01(\x0e2\x16.turboci.v1.StageStateR\bnewState\x12'\n" +
+	"\x05stage\x18\x04 \x01(\v2\x11.turboci.v1.StageR\x05stage\"\x91\x01\n" +
+	"\x16WorkPlanCompletedEvent\x12)\n" +
+	"\x10checks_completed\x18\x01 \x01(\x05R\x0fchecksCompleted\x12)\n" +
+	"\x10stages_completed\x18\x02 \x01(\x05R\x0fstagesCompleted\x12!\n" +
+	"\fhas_failures\x18\x03 \x01(\bR\vhasFailures2\xb9\a\n" +
 	"\x13TurboCIOrchestrator\x12W\n" +
 	"\x0eCreateWorkPlan\x12!.turboci.v1.CreateWorkPlanRequest\x1a\".turboci.v1.CreateWorkPlanResponse\x12N\n" +
 	"\vGetWorkPlan\x12\x1e.turboci.v1.GetWorkPlanRequest\x1a\x1f.turboci.v1.GetWorkPlanResponse\x12K\n" +
@@ -1081,7 +1534,8 @@ const file_turboci_v1_service_proto_rawDesc = "" +
 	"\x15UnregisterStageRunner\x12(.turboci.v1.UnregisterStageRunnerRequest\x1a).turboci.v1.UnregisterStageRunnerResponse\x12]\n" +
 	"\x10ListStageRunners\x12#.turboci.v1.ListStageRunnersRequest\x1a$.turboci.v1.ListStageRunnersResponse\x12i\n" +
 	"\x14UpdateStageExecution\x12'.turboci.v1.UpdateStageExecutionRequest\x1a(.turboci.v1.UpdateStageExecutionResponse\x12o\n" +
-	"\x16CompleteStageExecution\x12).turboci.v1.CompleteStageExecutionRequest\x1a*.turboci.v1.CompleteStageExecutionResponseB:Z8github.com/example/turboci-lite/gen/turboci/v1;turbocipbb\x06proto3"
+	"\x16CompleteStageExecution\x12).turboci.v1.CompleteStageExecutionRequest\x1a*.turboci.v1.CompleteStageExecutionResponse\x12N\n" +
+	"\rWatchWorkPlan\x12 .turboci.v1.WatchWorkPlanRequest\x1a\x19.turboci.v1.WorkPlanEvent0\x01B:Z8github.com/example/turboci-lite/gen/turboci/v1;turbocipbb\x06proto3"
 
 var (
 	file_turboci_v1_service_proto_rawDescOnce sync.Once
@@ -1095,7 +1549,7 @@ func file_turboci_v1_service_proto_rawDescGZIP() []byte {
 	return file_turboci_v1_service_proto_rawDescData
 }
 
-var file_turboci_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_turboci_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_turboci_v1_service_proto_goTypes = []any{
 	(*WriteNodesRequest)(nil),              // 0: turboci.v1.WriteNodesRequest
 	(*WriteNodesResponse)(nil),             // 1: turboci.v1.WriteNodesResponse
@@ -1112,70 +1566,89 @@ var file_turboci_v1_service_proto_goTypes = []any{
 	(*UpdateStageExecutionResponse)(nil),   // 12: turboci.v1.UpdateStageExecutionResponse
 	(*CompleteStageExecutionRequest)(nil),  // 13: turboci.v1.CompleteStageExecutionRequest
 	(*CompleteStageExecutionResponse)(nil), // 14: turboci.v1.CompleteStageExecutionResponse
-	nil,                                    // 15: turboci.v1.RegisterStageRunnerRequest.MetadataEntry
-	nil,                                    // 16: turboci.v1.StageRunnerInfo.MetadataEntry
-	(*CheckWrite)(nil),                     // 17: turboci.v1.CheckWrite
-	(*StageWrite)(nil),                     // 18: turboci.v1.StageWrite
-	(*Check)(nil),                          // 19: turboci.v1.Check
-	(*Stage)(nil),                          // 20: turboci.v1.Stage
-	(CheckState)(0),                        // 21: turboci.v1.CheckState
-	(StageState)(0),                        // 22: turboci.v1.StageState
-	(ExecutionMode)(0),                     // 23: turboci.v1.ExecutionMode
-	(*timestamppb.Timestamp)(nil),          // 24: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),                // 25: google.protobuf.Struct
-	(*CheckUpdate)(nil),                    // 26: turboci.v1.CheckUpdate
-	(*Failure)(nil),                        // 27: turboci.v1.Failure
-	(*CreateWorkPlanRequest)(nil),          // 28: turboci.v1.CreateWorkPlanRequest
-	(*GetWorkPlanRequest)(nil),             // 29: turboci.v1.GetWorkPlanRequest
-	(*CreateWorkPlanResponse)(nil),         // 30: turboci.v1.CreateWorkPlanResponse
-	(*GetWorkPlanResponse)(nil),            // 31: turboci.v1.GetWorkPlanResponse
+	(*WatchWorkPlanRequest)(nil),           // 15: turboci.v1.WatchWorkPlanRequest
+	(*WorkPlanEvent)(nil),                  // 16: turboci.v1.WorkPlanEvent
+	(*CheckEvent)(nil),                     // 17: turboci.v1.CheckEvent
+	(*StageEvent)(nil),                     // 18: turboci.v1.StageEvent
+	(*WorkPlanCompletedEvent)(nil),         // 19: turboci.v1.WorkPlanCompletedEvent
+	nil,                                    // 20: turboci.v1.RegisterStageRunnerRequest.MetadataEntry
+	nil,                                    // 21: turboci.v1.StageRunnerInfo.MetadataEntry
+	(*CheckWrite)(nil),                     // 22: turboci.v1.CheckWrite
+	(*StageWrite)(nil),                     // 23: turboci.v1.StageWrite
+	(*Check)(nil),                          // 24: turboci.v1.Check
+	(*Stage)(nil),                          // 25: turboci.v1.Stage
+	(CheckState)(0),                        // 26: turboci.v1.CheckState
+	(StageState)(0),                        // 27: turboci.v1.StageState
+	(ExecutionMode)(0),                     // 28: turboci.v1.ExecutionMode
+	(*timestamppb.Timestamp)(nil),          // 29: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),                // 30: google.protobuf.Struct
+	(*CheckUpdate)(nil),                    // 31: turboci.v1.CheckUpdate
+	(*Failure)(nil),                        // 32: turboci.v1.Failure
+	(*CreateWorkPlanRequest)(nil),          // 33: turboci.v1.CreateWorkPlanRequest
+	(*GetWorkPlanRequest)(nil),             // 34: turboci.v1.GetWorkPlanRequest
+	(*CreateWorkPlanResponse)(nil),         // 35: turboci.v1.CreateWorkPlanResponse
+	(*GetWorkPlanResponse)(nil),            // 36: turboci.v1.GetWorkPlanResponse
 }
 var file_turboci_v1_service_proto_depIdxs = []int32{
-	17, // 0: turboci.v1.WriteNodesRequest.checks:type_name -> turboci.v1.CheckWrite
-	18, // 1: turboci.v1.WriteNodesRequest.stages:type_name -> turboci.v1.StageWrite
-	19, // 2: turboci.v1.WriteNodesResponse.checks:type_name -> turboci.v1.Check
-	20, // 3: turboci.v1.WriteNodesResponse.stages:type_name -> turboci.v1.Stage
-	21, // 4: turboci.v1.QueryNodesRequest.check_states:type_name -> turboci.v1.CheckState
-	22, // 5: turboci.v1.QueryNodesRequest.stage_states:type_name -> turboci.v1.StageState
-	19, // 6: turboci.v1.QueryNodesResponse.checks:type_name -> turboci.v1.Check
-	20, // 7: turboci.v1.QueryNodesResponse.stages:type_name -> turboci.v1.Stage
-	23, // 8: turboci.v1.RegisterStageRunnerRequest.supported_modes:type_name -> turboci.v1.ExecutionMode
-	15, // 9: turboci.v1.RegisterStageRunnerRequest.metadata:type_name -> turboci.v1.RegisterStageRunnerRequest.MetadataEntry
-	24, // 10: turboci.v1.RegisterStageRunnerResponse.expires_at:type_name -> google.protobuf.Timestamp
+	22, // 0: turboci.v1.WriteNodesRequest.checks:type_name -> turboci.v1.CheckWrite
+	23, // 1: turboci.v1.WriteNodesRequest.stages:type_name -> turboci.v1.StageWrite
+	24, // 2: turboci.v1.WriteNodesResponse.checks:type_name -> turboci.v1.Check
+	25, // 3: turboci.v1.WriteNodesResponse.stages:type_name -> turboci.v1.Stage
+	26, // 4: turboci.v1.QueryNodesRequest.check_states:type_name -> turboci.v1.CheckState
+	27, // 5: turboci.v1.QueryNodesRequest.stage_states:type_name -> turboci.v1.StageState
+	24, // 6: turboci.v1.QueryNodesResponse.checks:type_name -> turboci.v1.Check
+	25, // 7: turboci.v1.QueryNodesResponse.stages:type_name -> turboci.v1.Stage
+	28, // 8: turboci.v1.RegisterStageRunnerRequest.supported_modes:type_name -> turboci.v1.ExecutionMode
+	20, // 9: turboci.v1.RegisterStageRunnerRequest.metadata:type_name -> turboci.v1.RegisterStageRunnerRequest.MetadataEntry
+	29, // 10: turboci.v1.RegisterStageRunnerResponse.expires_at:type_name -> google.protobuf.Timestamp
 	10, // 11: turboci.v1.ListStageRunnersResponse.runners:type_name -> turboci.v1.StageRunnerInfo
-	23, // 12: turboci.v1.StageRunnerInfo.supported_modes:type_name -> turboci.v1.ExecutionMode
-	24, // 13: turboci.v1.StageRunnerInfo.registered_at:type_name -> google.protobuf.Timestamp
-	24, // 14: turboci.v1.StageRunnerInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
-	24, // 15: turboci.v1.StageRunnerInfo.expires_at:type_name -> google.protobuf.Timestamp
-	16, // 16: turboci.v1.StageRunnerInfo.metadata:type_name -> turboci.v1.StageRunnerInfo.MetadataEntry
-	25, // 17: turboci.v1.UpdateStageExecutionRequest.details:type_name -> google.protobuf.Struct
-	22, // 18: turboci.v1.CompleteStageExecutionRequest.stage_state:type_name -> turboci.v1.StageState
-	26, // 19: turboci.v1.CompleteStageExecutionRequest.check_updates:type_name -> turboci.v1.CheckUpdate
-	27, // 20: turboci.v1.CompleteStageExecutionRequest.failure:type_name -> turboci.v1.Failure
-	25, // 21: turboci.v1.CompleteStageExecutionRequest.details:type_name -> google.protobuf.Struct
-	28, // 22: turboci.v1.TurboCIOrchestrator.CreateWorkPlan:input_type -> turboci.v1.CreateWorkPlanRequest
-	29, // 23: turboci.v1.TurboCIOrchestrator.GetWorkPlan:input_type -> turboci.v1.GetWorkPlanRequest
-	0,  // 24: turboci.v1.TurboCIOrchestrator.WriteNodes:input_type -> turboci.v1.WriteNodesRequest
-	2,  // 25: turboci.v1.TurboCIOrchestrator.QueryNodes:input_type -> turboci.v1.QueryNodesRequest
-	4,  // 26: turboci.v1.TurboCIOrchestrator.RegisterStageRunner:input_type -> turboci.v1.RegisterStageRunnerRequest
-	6,  // 27: turboci.v1.TurboCIOrchestrator.UnregisterStageRunner:input_type -> turboci.v1.UnregisterStageRunnerRequest
-	8,  // 28: turboci.v1.TurboCIOrchestrator.ListStageRunners:input_type -> turboci.v1.ListStageRunnersRequest
-	11, // 29: turboci.v1.TurboCIOrchestrator.UpdateStageExecution:input_type -> turboci.v1.UpdateStageExecutionRequest
-	13, // 30: turboci.v1.TurboCIOrchestrator.CompleteStageExecution:input_type -> turboci.v1.CompleteStageExecutionRequest
-	30, // 31: turboci.v1.TurboCIOrchestrator.CreateWorkPlan:output_type -> turboci.v1.CreateWorkPlanResponse
-	31, // 32: turboci.v1.TurboCIOrchestrator.GetWorkPlan:output_type -> turboci.v1.GetWorkPlanResponse
-	1,  // 33: turboci.v1.TurboCIOrchestrator.WriteNodes:output_type -> turboci.v1.WriteNodesResponse
-	3,  // 34: turboci.v1.TurboCIOrchestrator.QueryNodes:output_type -> turboci.v1.QueryNodesResponse
-	5,  // 35: turboci.v1.TurboCIOrchestrator.RegisterStageRunner:output_type -> turboci.v1.RegisterStageRunnerResponse
-	7,  // 36: turboci.v1.TurboCIOrchestrator.UnregisterStageRunner:output_type -> turboci.v1.UnregisterStageRunnerResponse
-	9,  // 37: turboci.v1.TurboCIOrchestrator.ListStageRunners:output_type -> turboci.v1.ListStageRunnersResponse
-	12, // 38: turboci.v1.TurboCIOrchestrator.UpdateStageExecution:output_type -> turboci.v1.UpdateStageExecutionResponse
-	14, // 39: turboci.v1.TurboCIOrchestrator.CompleteStageExecution:output_type -> turboci.v1.CompleteStageExecutionResponse
-	31, // [31:40] is the sub-list for method output_type
-	22, // [22:31] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	28, // 12: turboci.v1.StageRunnerInfo.supported_modes:type_name -> turboci.v1.ExecutionMode
+	29, // 13: turboci.v1.StageRunnerInfo.registered_at:type_name -> google.protobuf.Timestamp
+	29, // 14: turboci.v1.StageRunnerInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
+	29, // 15: turboci.v1.StageRunnerInfo.expires_at:type_name -> google.protobuf.Timestamp
+	21, // 16: turboci.v1.StageRunnerInfo.metadata:type_name -> turboci.v1.StageRunnerInfo.MetadataEntry
+	30, // 17: turboci.v1.UpdateStageExecutionRequest.details:type_name -> google.protobuf.Struct
+	27, // 18: turboci.v1.CompleteStageExecutionRequest.stage_state:type_name -> turboci.v1.StageState
+	31, // 19: turboci.v1.CompleteStageExecutionRequest.check_updates:type_name -> turboci.v1.CheckUpdate
+	32, // 20: turboci.v1.CompleteStageExecutionRequest.failure:type_name -> turboci.v1.Failure
+	30, // 21: turboci.v1.CompleteStageExecutionRequest.details:type_name -> google.protobuf.Struct
+	26, // 22: turboci.v1.WatchWorkPlanRequest.check_state_filter:type_name -> turboci.v1.CheckState
+	27, // 23: turboci.v1.WatchWorkPlanRequest.stage_state_filter:type_name -> turboci.v1.StageState
+	29, // 24: turboci.v1.WorkPlanEvent.timestamp:type_name -> google.protobuf.Timestamp
+	17, // 25: turboci.v1.WorkPlanEvent.check_event:type_name -> turboci.v1.CheckEvent
+	18, // 26: turboci.v1.WorkPlanEvent.stage_event:type_name -> turboci.v1.StageEvent
+	19, // 27: turboci.v1.WorkPlanEvent.completed_event:type_name -> turboci.v1.WorkPlanCompletedEvent
+	26, // 28: turboci.v1.CheckEvent.old_state:type_name -> turboci.v1.CheckState
+	26, // 29: turboci.v1.CheckEvent.new_state:type_name -> turboci.v1.CheckState
+	24, // 30: turboci.v1.CheckEvent.check:type_name -> turboci.v1.Check
+	27, // 31: turboci.v1.StageEvent.old_state:type_name -> turboci.v1.StageState
+	27, // 32: turboci.v1.StageEvent.new_state:type_name -> turboci.v1.StageState
+	25, // 33: turboci.v1.StageEvent.stage:type_name -> turboci.v1.Stage
+	33, // 34: turboci.v1.TurboCIOrchestrator.CreateWorkPlan:input_type -> turboci.v1.CreateWorkPlanRequest
+	34, // 35: turboci.v1.TurboCIOrchestrator.GetWorkPlan:input_type -> turboci.v1.GetWorkPlanRequest
+	0,  // 36: turboci.v1.TurboCIOrchestrator.WriteNodes:input_type -> turboci.v1.WriteNodesRequest
+	2,  // 37: turboci.v1.TurboCIOrchestrator.QueryNodes:input_type -> turboci.v1.QueryNodesRequest
+	4,  // 38: turboci.v1.TurboCIOrchestrator.RegisterStageRunner:input_type -> turboci.v1.RegisterStageRunnerRequest
+	6,  // 39: turboci.v1.TurboCIOrchestrator.UnregisterStageRunner:input_type -> turboci.v1.UnregisterStageRunnerRequest
+	8,  // 40: turboci.v1.TurboCIOrchestrator.ListStageRunners:input_type -> turboci.v1.ListStageRunnersRequest
+	11, // 41: turboci.v1.TurboCIOrchestrator.UpdateStageExecution:input_type -> turboci.v1.UpdateStageExecutionRequest
+	13, // 42: turboci.v1.TurboCIOrchestrator.CompleteStageExecution:input_type -> turboci.v1.CompleteStageExecutionRequest
+	15, // 43: turboci.v1.TurboCIOrchestrator.WatchWorkPlan:input_type -> turboci.v1.WatchWorkPlanRequest
+	35, // 44: turboci.v1.TurboCIOrchestrator.CreateWorkPlan:output_type -> turboci.v1.CreateWorkPlanResponse
+	36, // 45: turboci.v1.TurboCIOrchestrator.GetWorkPlan:output_type -> turboci.v1.GetWorkPlanResponse
+	1,  // 46: turboci.v1.TurboCIOrchestrator.WriteNodes:output_type -> turboci.v1.WriteNodesResponse
+	3,  // 47: turboci.v1.TurboCIOrchestrator.QueryNodes:output_type -> turboci.v1.QueryNodesResponse
+	5,  // 48: turboci.v1.TurboCIOrchestrator.RegisterStageRunner:output_type -> turboci.v1.RegisterStageRunnerResponse
+	7,  // 49: turboci.v1.TurboCIOrchestrator.UnregisterStageRunner:output_type -> turboci.v1.UnregisterStageRunnerResponse
+	9,  // 50: turboci.v1.TurboCIOrchestrator.ListStageRunners:output_type -> turboci.v1.ListStageRunnersResponse
+	12, // 51: turboci.v1.TurboCIOrchestrator.UpdateStageExecution:output_type -> turboci.v1.UpdateStageExecutionResponse
+	14, // 52: turboci.v1.TurboCIOrchestrator.CompleteStageExecution:output_type -> turboci.v1.CompleteStageExecutionResponse
+	16, // 53: turboci.v1.TurboCIOrchestrator.WatchWorkPlan:output_type -> turboci.v1.WorkPlanEvent
+	44, // [44:54] is the sub-list for method output_type
+	34, // [34:44] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_turboci_v1_service_proto_init() }
@@ -1188,13 +1661,18 @@ func file_turboci_v1_service_proto_init() {
 	file_turboci_v1_stage_proto_init()
 	file_turboci_v1_common_proto_init()
 	file_turboci_v1_stagerunner_proto_init()
+	file_turboci_v1_service_proto_msgTypes[16].OneofWrappers = []any{
+		(*WorkPlanEvent_CheckEvent)(nil),
+		(*WorkPlanEvent_StageEvent)(nil),
+		(*WorkPlanEvent_CompletedEvent)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_turboci_v1_service_proto_rawDesc), len(file_turboci_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   17,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
