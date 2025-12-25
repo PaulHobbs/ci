@@ -557,6 +557,9 @@ func (c *grpcRunnerClient) Run(ctx context.Context, req *service.RunRequest) (*s
 		if update.ResultData != nil {
 			cu.Data = update.ResultData.AsMap()
 		}
+		if update.Failure != nil {
+			cu.Failure = &domain.Failure{Message: update.Failure.Message}
+		}
 		resp.CheckUpdates = append(resp.CheckUpdates, cu)
 	}
 

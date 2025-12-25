@@ -79,6 +79,7 @@ type CheckUpdate struct {
 	State    domain.CheckState
 	Data     map[string]any
 	Finalize bool
+	Failure  *domain.Failure
 }
 
 // DispatcherConfig holds configuration for the Dispatcher.
@@ -551,12 +552,13 @@ func (d *Dispatcher) applyCheckUpdates(ctx context.Context, workPlanID string, u
 			ID:    update.CheckID,
 			State: &update.State,
 		}
-		if update.Data != nil || update.Finalize {
+		if update.Data != nil || update.Finalize || update.Failure != nil {
 			cw.Result = &CheckResultWrite{
 				OwnerType: "stage",
 				OwnerID:   "",
 				Data:      update.Data,
 				Finalize:  update.Finalize,
+				Failure:   update.Failure,
 			}
 		}
 		checkWrites = append(checkWrites, cw)
