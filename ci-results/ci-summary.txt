@@ -2,105 +2,109 @@
   CI REPORT - PASSED
 =============================================================
 
-Work Plan: 89adf6d3-2eb9-41aa-a6f7-6cd814e20779
-Duration:  2m4.473189s
-Started:   2025-12-25T14:05:54-08:00
-Ended:     2025-12-25T14:07:58-08:00
+Work Plan: 3b7aa939-845b-4dde-8b84-b02ca5c5050b
+Duration:  2m5.835518s
+Started:   2025-12-25T22:09:45-08:00
+Ended:     2025-12-25T22:11:50-08:00
 
 -------------------------------------------------------------
   SUMMARY
 -------------------------------------------------------------
 
 Builds:    5 total, 5 passed, 0 failed
-Tests:     33 total, 8 passed, 0 failed, 25 skipped
+Tests:     35 total, 8 passed, 0 failed, 27 skipped
 E2E Tests: 1 total, 1 passed, 0 failed, 0 skipped
 
 -------------------------------------------------------------
   BUILDS
 -------------------------------------------------------------
 
-  [PASS] ci (3688ms)
-  [PASS] ci-lint (1656ms)
-  [PASS] culprit-finder (3703ms)
-  [PASS] runner-example (2110ms)
-  [PASS] server (3678ms)
+  [PASS] ci (735ms)
+  [PASS] ci-lint (645ms)
+  [PASS] culprit-finder (2919ms)
+  [PASS] runner-example (851ms)
+  [PASS] server (3109ms)
 
 -------------------------------------------------------------
   UNIT TESTS
 -------------------------------------------------------------
 
   [PASS] github.com/example/turboci-lite/client
-         10 passed, 0 failed, 0 skipped (2871ms)
+         10 passed, 0 failed, 0 skipped (2343ms)
   [PASS] github.com/example/turboci-lite/client_deploy
-         4 passed, 0 failed, 0 skipped (2830ms)
+         4 passed, 0 failed, 0 skipped (2355ms)
   [PASS] github.com/example/turboci-lite/cmd/ci
-         0 passed, 0 failed, 0 skipped (1325ms)
+         0 passed, 0 failed, 0 skipped (1069ms)
   [PASS] github.com/example/turboci-lite/cmd/ci-lint
-         0 passed, 0 failed, 0 skipped (1080ms)
+         0 passed, 0 failed, 0 skipped (742ms)
   [PASS] github.com/example/turboci-lite/cmd/ci/progress
-         0 passed, 0 failed, 0 skipped (895ms)
+         0 passed, 0 failed, 0 skipped (963ms)
   [PASS] github.com/example/turboci-lite/cmd/ci/runners/builder
-         0 passed, 0 failed, 0 skipped (1235ms)
+         0 passed, 0 failed, 0 skipped (983ms)
   [PASS] github.com/example/turboci-lite/cmd/ci/runners/collector
-         0 passed, 0 failed, 0 skipped (1221ms)
+         0 passed, 0 failed, 0 skipped (813ms)
   [PASS] github.com/example/turboci-lite/cmd/ci/runners/common
-         0 passed, 0 failed, 0 skipped (1030ms)
+         0 passed, 0 failed, 0 skipped (821ms)
   [PASS] github.com/example/turboci-lite/cmd/ci/runners/conditional
-         0 passed, 0 failed, 0 skipped (990ms)
+         0 passed, 0 failed, 0 skipped (1085ms)
   [PASS] github.com/example/turboci-lite/cmd/ci/runners/materialize
-         0 passed, 0 failed, 0 skipped (1260ms)
+         0 passed, 0 failed, 0 skipped (1113ms)
   [PASS] github.com/example/turboci-lite/cmd/ci/runners/tester
-         0 passed, 0 failed, 0 skipped (1155ms)
+         0 passed, 0 failed, 0 skipped (973ms)
   [PASS] github.com/example/turboci-lite/cmd/ci/runners/trigger
-         0 passed, 0 failed, 0 skipped (1159ms)
+         0 passed, 0 failed, 0 skipped (1061ms)
   [PASS] github.com/example/turboci-lite/cmd/ci/testing
-         8 passed, 0 failed, 0 skipped (2644ms)
+         8 passed, 0 failed, 0 skipped (2303ms)
   [PASS] github.com/example/turboci-lite/cmd/culprit-finder
-         0 passed, 0 failed, 0 skipped (1049ms)
+         0 passed, 0 failed, 0 skipped (1057ms)
   [PASS] github.com/example/turboci-lite/cmd/culprit-finder/internal/cli
-         0 passed, 0 failed, 0 skipped (1038ms)
+         0 passed, 0 failed, 0 skipped (1072ms)
   [PASS] github.com/example/turboci-lite/cmd/culprit-finder/internal/session
-         0 passed, 0 failed, 0 skipped (396ms)
+         0 passed, 0 failed, 0 skipped (250ms)
   [PASS] github.com/example/turboci-lite/cmd/culprit-finder/internal/ui
-         0 passed, 0 failed, 0 skipped (214ms)
+         0 passed, 0 failed, 0 skipped (248ms)
   [PASS] github.com/example/turboci-lite/cmd/runner-example
-         0 passed, 0 failed, 0 skipped (1151ms)
+         0 passed, 0 failed, 0 skipped (1058ms)
   [PASS] github.com/example/turboci-lite/cmd/server
-         0 passed, 0 failed, 0 skipped (1269ms)
+         0 passed, 0 failed, 0 skipped (347ms)
   [PASS] github.com/example/turboci-lite/culprit/decoder
-         99 passed, 0 failed, 0 skipped (1479ms)
+         99 passed, 0 failed, 0 skipped (1277ms)
   [PASS] github.com/example/turboci-lite/culprit/domain
-         0 passed, 0 failed, 0 skipped (564ms)
+         0 passed, 0 failed, 0 skipped (766ms)
   [PASS] github.com/example/turboci-lite/culprit/matrix
-         79 passed, 0 failed, 0 skipped (1181ms)
+         79 passed, 0 failed, 0 skipped (893ms)
   [PASS] github.com/example/turboci-lite/culprit/runner
-         43 passed, 0 failed, 0 skipped (59313ms)
+         43 passed, 0 failed, 0 skipped (44844ms)
   [PASS] github.com/example/turboci-lite/gen/turboci/v1
-         0 passed, 0 failed, 0 skipped (1390ms)
+         0 passed, 0 failed, 0 skipped (1213ms)
   [PASS] github.com/example/turboci-lite/internal/domain
-         0 passed, 0 failed, 0 skipped (700ms)
+         0 passed, 0 failed, 0 skipped (533ms)
   [PASS] github.com/example/turboci-lite/internal/endpoint
-         0 passed, 0 failed, 0 skipped (1244ms)
+         0 passed, 0 failed, 0 skipped (1154ms)
+  [PASS] github.com/example/turboci-lite/internal/observability
+         0 passed, 0 failed, 0 skipped (699ms)
   [PASS] github.com/example/turboci-lite/internal/service
-         0 passed, 0 failed, 0 skipped (934ms)
+         0 passed, 0 failed, 0 skipped (1101ms)
   [PASS] github.com/example/turboci-lite/internal/storage
-         0 passed, 0 failed, 0 skipped (962ms)
+         0 passed, 0 failed, 0 skipped (968ms)
   [PASS] github.com/example/turboci-lite/internal/storage/sqlite
-         0 passed, 0 failed, 0 skipped (839ms)
+         0 passed, 0 failed, 0 skipped (763ms)
   [PASS] github.com/example/turboci-lite/internal/transport/grpc
-         0 passed, 0 failed, 0 skipped (1317ms)
+         0 passed, 0 failed, 0 skipped (1165ms)
+  [PASS] github.com/example/turboci-lite/internal/web
+         0 passed, 0 failed, 0 skipped (1188ms)
   [PASS] github.com/example/turboci-lite/pkg/ci
-         41 passed, 0 failed, 0 skipped (2335ms)
+         41 passed, 0 failed, 0 skipped (1688ms)
   [PASS] github.com/example/turboci-lite/pkg/ci/lint
-         1 passed, 0 failed, 0 skipped (1865ms)
+         1 passed, 0 failed, 0 skipped (1455ms)
   [PASS] github.com/example/turboci-lite/pkg/id
-         0 passed, 0 failed, 0 skipped (746ms)
+         0 passed, 0 failed, 0 skipped (449ms)
 
 -------------------------------------------------------------
   E2E TESTS
 -------------------------------------------------------------
 
   [PASS] e2e
-         23 passed, 0 failed (4915ms)
+         23 passed, 0 failed (4960ms)
 
 =============================================================

@@ -29,6 +29,9 @@ type WorkPlanRepository interface {
 	// Get retrieves a WorkPlan by ID.
 	Get(ctx context.Context, id string) (*domain.WorkPlan, error)
 
+	// List lists all WorkPlans.
+	List(ctx context.Context) ([]*domain.WorkPlan, error)
+
 	// Update updates an existing WorkPlan.
 	Update(ctx context.Context, wp *domain.WorkPlan) error
 
@@ -98,11 +101,30 @@ type DependencyRepository interface {
 	// GetByTarget retrieves dependencies where the given node is the target.
 	GetByTarget(ctx context.Context, workPlanID string, targetType domain.NodeType, targetID string) ([]*domain.Dependency, error)
 
+	// GetByTargets retrieves dependencies for multiple targets in a single query.
+	// Returns a map where the key is "type:id" and value is the list of dependencies.
+	GetByTargets(ctx context.Context, workPlanID string, targets []TargetNode) (map[string][]*domain.Dependency, error)
+
 	// MarkResolved marks a dependency as resolved.
 	MarkResolved(ctx context.Context, id int64, satisfied bool) error
 
+	// MarkResolvedBatch marks multiple dependencies as resolved in a single operation.
+	MarkResolvedBatch(ctx context.Context, updates []DependencyUpdate) error
+
 	// GetUnresolvedByTarget gets unresolved dependencies pointing to a target.
 	GetUnresolvedByTarget(ctx context.Context, workPlanID string, targetType domain.NodeType, targetID string) ([]*domain.Dependency, error)
+}
+
+// TargetNode represents a target node for batch dependency queries.
+type TargetNode struct {
+	Type domain.NodeType
+	ID   string
+}
+
+// DependencyUpdate represents a dependency update for batch operations.
+type DependencyUpdate struct {
+	ID        int64
+	Satisfied bool
 }
 
 // StageRunnerRepository provides access to runner registrations.

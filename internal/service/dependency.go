@@ -10,63 +10,70 @@ import (
 )
 
 // resolveDependencies resolves dependencies and advances node states.
+// For backward compatibility, this creates a new cache on each call.
 func (s *OrchestratorService) resolveDependencies(ctx context.Context, uow storage.UnitOfWork, workPlanID string) error {
+	cache := newDependencyCache()
+	return s.resolveDependenciesCached(ctx, uow, workPlanID, cache)
+}
+
+// resolveDependenciesCached resolves dependencies using a cache to avoid redundant queries.
+func (s *OrchestratorService) resolveDependenciesCached(ctx context.Context, uow storage.UnitOfWork, workPlanID string, cache *dependencyCache) error {
 	start := time.Now()
-	
-	// Get all checks and stages
-	checks, err := uow.Checks().List(ctx, workPlanID, storage.ListOptions{})
-	if err != nil {
+	defer func() {
+		if s.metrics != nil {
+			s.metrics.DependencyResolutionTime().Observe(time.Since(start))
+		}
+	}()
+
+	// Load nodes into cache if first call
+	if !cache.loaded {
+		checks, err := uow.Checks().List(ctx, workPlanID, storage.ListOptions{})
+		if err != nil {
+			return err
+		}
+		cache.checks = checks
+
+		stages, err := uow.Stages().List(ctx, workPlanID, storage.ListOptions{})
+		if err != nil {
+			return err
+		}
+		cache.stages = stages
+
+		// Build finalized nodes map
+		for _, check := range checks {
+			if check.State == domain.CheckStateFinal {
+				cache.finalizedNodes[string(domain.NodeTypeCheck)+":"+check.ID] = true
+			}
+		}
+		for _, stage := range stages {
+			if stage.State == domain.StageStateFinal {
+				cache.finalizedNodes[string(domain.NodeTypeStage)+":"+stage.ID] = true
+			}
+		}
+
+		cache.loaded = true
+
+		// Track node counts only on first load
+		if s.metrics != nil {
+			s.metrics.NodesEvaluated().WithLabels("check").Add(int64(len(checks)))
+			s.metrics.NodesEvaluated().WithLabels("stage").Add(int64(len(stages)))
+		}
+	}
+
+	// Use batch propagation for all finalized nodes
+	if err := s.propagateResolutionBatch(ctx, uow, workPlanID, cache); err != nil {
 		return err
 	}
 
-	stages, err := uow.Stages().List(ctx, workPlanID, storage.ListOptions{})
-	if err != nil {
-		return err
-	}
-
-	// Build a map of finalized nodes for quick lookup
-	finalizedNodes := make(map[string]bool)
-	for _, check := range checks {
-		if check.State == domain.CheckStateFinal {
-			finalizedNodes[string(domain.NodeTypeCheck)+":"+check.ID] = true
-		}
-	}
-	for _, stage := range stages {
-		if stage.State == domain.StageStateFinal {
-			finalizedNodes[string(domain.NodeTypeStage)+":"+stage.ID] = true
-		}
-	}
-
-	// Propagate resolution for all finalized nodes.
-	// Optimization: Instead of propagateResolution for each, we could do this more efficiently,
-	// but let's at least keep the timing log accurate.
-	propagateCount := 0
-	for _, check := range checks {
-		if check.State == domain.CheckStateFinal {
-			if err := s.propagateResolution(ctx, uow, workPlanID, domain.NodeTypeCheck, check.ID); err != nil {
-				return err
-			}
-			propagateCount++
-		}
-	}
-	for _, stage := range stages {
-		if stage.State == domain.StageStateFinal {
-			if err := s.propagateResolution(ctx, uow, workPlanID, domain.NodeTypeStage, stage.ID); err != nil {
-				return err
-			}
-			propagateCount++
-		}
-	}
-
-	// Advance node states using the finalized nodes map to avoid N+1 queries
-	if err := s.advanceNodeStatesOptimized(ctx, uow, workPlanID, checks, stages, finalizedNodes); err != nil {
+	// Advance node states using the cached data and finalized nodes map
+	if err := s.advanceNodeStatesOptimized(ctx, uow, workPlanID, cache.checks, cache.stages, cache.finalizedNodes); err != nil {
 		return err
 	}
 
 	duration := time.Since(start)
 	if duration > 100*time.Millisecond {
-		log.Printf("[WP:%s] resolveDependencies took %v (checks=%d, stages=%d, propagated=%d)", 
-			workPlanID, duration, len(checks), len(stages), propagateCount)
+		log.Printf("[WP:%s] resolveDependenciesCached took %v (checks=%d, stages=%d, cached=%v)",
+			workPlanID, duration, len(cache.checks), len(cache.stages), cache.loaded)
 	}
 
 	return nil
@@ -88,6 +95,55 @@ func (s *OrchestratorService) propagateResolution(ctx context.Context, uow stora
 	}
 
 	return nil
+}
+
+// propagateResolutionBatch processes all finalized nodes in one batch.
+func (s *OrchestratorService) propagateResolutionBatch(ctx context.Context, uow storage.UnitOfWork, workPlanID string, cache *dependencyCache) error {
+	// Build list of finalized targets
+	targets := make([]storage.TargetNode, 0)
+
+	for _, check := range cache.checks {
+		if check.State == domain.CheckStateFinal {
+			targets = append(targets, storage.TargetNode{
+				Type: domain.NodeTypeCheck,
+				ID:   check.ID,
+			})
+		}
+	}
+	for _, stage := range cache.stages {
+		if stage.State == domain.StageStateFinal {
+			targets = append(targets, storage.TargetNode{
+				Type: domain.NodeTypeStage,
+				ID:   stage.ID,
+			})
+		}
+	}
+
+	if len(targets) == 0 {
+		return nil
+	}
+
+	// Fetch all dependencies in one query
+	depsByTarget, err := uow.Dependencies().GetByTargets(ctx, workPlanID, targets)
+	if err != nil {
+		return err
+	}
+
+	// Collect updates
+	updates := make([]storage.DependencyUpdate, 0)
+	for _, deps := range depsByTarget {
+		for _, dep := range deps {
+			if !dep.Resolved {
+				updates = append(updates, storage.DependencyUpdate{
+					ID:        dep.ID,
+					Satisfied: true, // Finalized = satisfied
+				})
+			}
+		}
+	}
+
+	// Apply all updates in batch
+	return uow.Dependencies().MarkResolvedBatch(ctx, updates)
 }
 
 // advanceNodeStatesOptimized is an optimized version of advanceNodeStates that takes already-fetched data.
@@ -231,6 +287,11 @@ func (s *OrchestratorService) advanceStageToAttempting(ctx context.Context, uow 
 		exec := domain.NewStageExecution(stage.WorkPlanID, stage.ID, attempt.Idx, stage.RunnerType, executionMode)
 		if err := uow.StageExecutions().Create(ctx, exec); err != nil {
 			return err
+		}
+
+		// Notify dispatcher that new work is available (event-driven dispatch)
+		if s.dispatcher != nil {
+			s.dispatcher.NotifyWorkAvailable()
 		}
 	}
 

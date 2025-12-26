@@ -6,18 +6,47 @@ import (
 	"time"
 
 	"github.com/example/turboci-lite/internal/domain"
+	"github.com/example/turboci-lite/internal/observability"
 	"github.com/example/turboci-lite/internal/storage"
 	"github.com/example/turboci-lite/pkg/id"
 )
 
-// OrchestratorService provides the core workflow orchestration logic.
-type OrchestratorService struct {
-	storage storage.Storage
+// dependencyCache caches node data within a transaction to avoid redundant queries.
+type dependencyCache struct {
+	checks         []*domain.Check
+	stages         []*domain.Stage
+	finalizedNodes map[string]bool // "type:id" → finalized
+	loaded         bool
 }
 
-// NewOrchestrator creates a new OrchestratorService.
+func newDependencyCache() *dependencyCache {
+	return &dependencyCache{
+		finalizedNodes: make(map[string]bool),
+		loaded:         false,
+	}
+}
+
+// OrchestratorService provides the core workflow orchestration logic.
+type OrchestratorService struct {
+	storage    storage.Storage
+	metrics    *observability.Metrics
+	dispatcher interface{ NotifyWorkAvailable() } // For event-driven dispatch notifications
+}
+
+// NewOrchestrator creates a new OrchestratorService without metrics.
 func NewOrchestrator(store storage.Storage) *OrchestratorService {
-	return &OrchestratorService{storage: store}
+	return NewOrchestratorWithMetrics(store, nil)
+}
+
+// NewOrchestratorWithMetrics creates a new OrchestratorService with metrics instrumentation.
+func NewOrchestratorWithMetrics(store storage.Storage, metrics *observability.Metrics) *OrchestratorService {
+	return &OrchestratorService{storage: store, metrics: metrics}
+}
+
+// SetDispatcher sets the dispatcher for event-driven work notifications.
+// This should be called after both the orchestrator and dispatcher are created.
+func (s *OrchestratorService) SetDispatcher(d interface{ NotifyWorkAvailable() }) {
+	s.dispatcher = d
 }
 
 // CreateWorkPlanRequest is the request for CreateWorkPlan.
@@ -120,11 +149,21 @@ type WriteNodesResponse struct {
 
 // WriteNodes atomically writes or updates multiple nodes within a WorkPlan.
 func (s *OrchestratorService) WriteNodes(ctx context.Context, req *WriteNodesRequest) (*WriteNodesResponse, error) {
+	start := time.Now()
+	defer func() {
+		if s.metrics != nil {
+			s.metrics.WriteNodesDuration().Observe(time.Since(start))
+		}
+	}()
+
 	uow, err := s.storage.BeginImmediate(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer uow.Rollback()
+
+	// Create dependency cache for this transaction
+	cache := newDependencyCache()
 
 	// Verify work plan exists
 	if _, err := uow.WorkPlans().Get(ctx, req.WorkPlanID); err != nil {
@@ -151,8 +190,8 @@ func (s *OrchestratorService) WriteNodes(ctx context.Context, req *WriteNodesReq
 		resp.Stages = append(resp.Stages, stage)
 	}
 
-	// Resolve dependencies and advance states
-	if err := s.resolveDependencies(ctx, uow, req.WorkPlanID); err != nil {
+	// Resolve dependencies and advance states using cache
+	if err := s.resolveDependenciesCached(ctx, uow, req.WorkPlanID, cache); err != nil {
 		return nil, fmt.Errorf("failed to resolve dependencies: %w", err)
 	}
 
@@ -182,6 +221,13 @@ type QueryNodesResponse struct {
 
 // QueryNodes queries nodes in a WorkPlan.
 func (s *OrchestratorService) QueryNodes(ctx context.Context, req *QueryNodesRequest) (*QueryNodesResponse, error) {
+	start := time.Now()
+	defer func() {
+		if s.metrics != nil {
+			s.metrics.QueryNodesDuration().Observe(time.Since(start))
+		}
+	}()
+
 	uow, err := s.storage.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)

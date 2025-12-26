@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/example/turboci-lite/internal/domain"
+	"github.com/example/turboci-lite/internal/observability"
 	"github.com/example/turboci-lite/internal/service"
 	"github.com/example/turboci-lite/internal/storage/sqlite"
 )
@@ -21,6 +23,7 @@ type TestEnv struct {
 	RunnerSvc    *service.RunnerService
 	CallbackSvc  *service.CallbackService
 	Dispatcher   *service.Dispatcher
+	Metrics      *observability.Metrics
 
 	// MockRunners is a registry of mock runners by address
 	MockRunners map[string]*MockRunner
@@ -36,6 +39,9 @@ func NewTestEnv(t *testing.T) *TestEnv {
 
 	ctx := context.Background()
 
+	// Create metrics infrastructure
+	metrics := observability.NewMetrics()
+
 	// Create a temp file database.
 	// Using a real file with WAL mode provides better concurrent write handling
 	// than shared memory, which is important since the dispatcher has multiple
@@ -47,7 +53,8 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	os.Remove(dbPath + "-wal")
 	os.Remove(dbPath + "-shm")
 
-	storage, err := sqlite.New(dbPath)
+	// Create storage with metrics instrumentation
+	storage, err := sqlite.NewWithMetrics(dbPath, metrics)
 	if err != nil {
 		t.Fatalf("failed to create storage: %v", err)
 	}
@@ -57,8 +64,8 @@ func NewTestEnv(t *testing.T) *TestEnv {
 		t.Fatalf("failed to migrate: %v", err)
 	}
 
-	// Create services
-	orchestrator := service.NewOrchestrator(storage)
+	// Create services with metrics instrumentation
+	orchestrator := service.NewOrchestratorWithMetrics(storage, metrics)
 	runnerSvc := service.NewRunnerService(storage)
 	callbackSvc := service.NewCallbackService(storage, orchestrator)
 
@@ -71,7 +78,7 @@ func NewTestEnv(t *testing.T) *TestEnv {
 		DefaultTimeout:     30 * time.Second,
 		CallbackAddress:    "localhost:50051",
 	}
-	dispatcher := service.NewDispatcher(storage, runnerSvc, orchestrator, dispatcherCfg)
+	dispatcher := service.NewDispatcherWithMetrics(storage, runnerSvc, orchestrator, dispatcherCfg, metrics)
 
 	env := &TestEnv{
 		Storage:      storage,
@@ -79,6 +86,7 @@ func NewTestEnv(t *testing.T) *TestEnv {
 		RunnerSvc:    runnerSvc,
 		CallbackSvc:  callbackSvc,
 		Dispatcher:   dispatcher,
+		Metrics:      metrics,
 		MockRunners:  make(map[string]*MockRunner),
 		t:            t,
 		dbPath:       dbPath,
@@ -100,12 +108,28 @@ func (e *TestEnv) Stop() {
 	e.Dispatcher.Stop()
 	e.Storage.Close()
 
+	// Dump metrics on test completion if verbose
+	if testing.Verbose() {
+		e.DumpMetrics()
+	}
+
 	// Clean up temp database files
 	if e.dbPath != "" {
 		os.Remove(e.dbPath)
 		os.Remove(e.dbPath + "-wal")
 		os.Remove(e.dbPath + "-shm")
 	}
+}
+
+// DumpMetrics outputs a JSON snapshot of all collected metrics.
+func (e *TestEnv) DumpMetrics() {
+	snapshot := e.Metrics.Snapshot()
+	data, err := json.MarshalIndent(snapshot, "", "  ")
+	if err != nil {
+		log.Printf("Failed to marshal metrics: %v", err)
+		return
+	}
+	log.Printf("\n=== Metrics Snapshot for %s ===\n%s\n", e.t.Name(), string(data))
 }
 
 // RegisterMockRunner creates and registers a mock runner.

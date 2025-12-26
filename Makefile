@@ -1,4 +1,4 @@
-.PHONY: proto build build-ci test clean run run-ci ci
+.PHONY: proto build build-ci build-web build-all test clean run run-ci ci dev-web
 
 # Proto generation
 proto:
@@ -62,3 +62,14 @@ fmt:
 # Lint code
 lint:
 	go vet ./...
+
+# Build web frontend
+build-web:
+	cd web && pnpm install && pnpm run build
+
+# Run web frontend development server (with hot reload)
+dev-web:
+	cd web && pnpm install && pnpm run dev
+
+# Build everything including web
+build-all: build-web build

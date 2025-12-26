@@ -17,7 +17,12 @@
       "Bash(go get:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(make ci:*)"
+      "Bash(make ci:*)",
+      "Bash(wc:*)",
+      "Bash(time go test:*)",
+      "Bash(time make ci:*)",
+      "Bash(pnpm install)",
+      "Bash(pnpm run build:*)"
     ]
   }
 }

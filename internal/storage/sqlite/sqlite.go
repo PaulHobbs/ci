@@ -4,19 +4,27 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 
+	"github.com/example/turboci-lite/internal/observability"
 	"github.com/example/turboci-lite/internal/storage"
 )
 
 // SQLiteStorage implements the Storage interface using SQLite.
 type SQLiteStorage struct {
-	db *sql.DB
+	db      *sql.DB
+	metrics *observability.Metrics
 }
 
-// New creates a new SQLite storage instance.
+// New creates a new SQLite storage instance without metrics.
 func New(path string) (*SQLiteStorage, error) {
+	return NewWithMetrics(path, nil)
+}
+
+// NewWithMetrics creates a new SQLite storage instance with metrics instrumentation.
+func NewWithMetrics(path string, metrics *observability.Metrics) (*SQLiteStorage, error) {
 	isMemory := strings.Contains(path, ":memory:") || strings.Contains(path, "mode=memory")
 
 	// Build connection string with SQLite pragmas.
@@ -48,21 +56,29 @@ func New(path string) (*SQLiteStorage, error) {
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
 
-	return &SQLiteStorage{db: db}, nil
+	return &SQLiteStorage{db: db, metrics: metrics}, nil
 }
 
 // Begin starts a new transaction.
 func (s *SQLiteStorage) Begin(ctx context.Context) (storage.UnitOfWork, error) {
+	start := time.Now()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	return newUnitOfWork(tx), nil
+
+	if s.metrics != nil {
+		s.metrics.DBTransactionBegin().Observe(time.Since(start))
+		s.metrics.DBActiveTransactions().Inc()
+	}
+
+	return newUnitOfWork(tx, s.metrics), nil
 }
 
 // BeginImmediate starts a new immediate transaction.
 // It emulates IMMEDIATE behavior by performing a write operation immediately.
 func (s *SQLiteStorage) BeginImmediate(ctx context.Context) (storage.UnitOfWork, error) {
+	lockStart := time.Now()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -76,7 +92,15 @@ func (s *SQLiteStorage) BeginImmediate(ctx context.Context) (storage.UnitOfWork,
 		return nil, err
 	}
 
-	return newUnitOfWork(tx), nil
+	// Track lock wait time (includes BeginTx + UPDATE _lock)
+	if s.metrics != nil {
+		lockWait := time.Since(lockStart)
+		s.metrics.DBLockWaitTime().Observe(lockWait)
+		s.metrics.DBTransactionBegin().Observe(lockWait)
+		s.metrics.DBActiveTransactions().Inc()
+	}
+
+	return newUnitOfWork(tx, s.metrics), nil
 }
 
 // Close closes the database connection.
@@ -92,6 +116,7 @@ func (s *SQLiteStorage) Migrate(ctx context.Context) error {
 // unitOfWork implements the UnitOfWork interface.
 type unitOfWork struct {
 	tx              *sql.Tx
+	metrics         *observability.Metrics
 	workPlans       *workPlanRepo
 	checks          *checkRepo
 	stages          *stageRepo
@@ -100,9 +125,10 @@ type unitOfWork struct {
 	stageExecutions *stageExecutionRepo
 }
 
-func newUnitOfWork(tx *sql.Tx) *unitOfWork {
+func newUnitOfWork(tx *sql.Tx, metrics *observability.Metrics) *unitOfWork {
 	return &unitOfWork{
 		tx:              tx,
+		metrics:         metrics,
 		workPlans:       &workPlanRepo{tx: tx},
 		checks:          &checkRepo{tx: tx},
 		stages:          &stageRepo{tx: tx},
@@ -137,9 +163,24 @@ func (u *unitOfWork) StageExecutions() storage.StageExecutionRepository {
 }
 
 func (u *unitOfWork) Commit() error {
-	return u.tx.Commit()
+	start := time.Now()
+	err := u.tx.Commit()
+
+	if u.metrics != nil {
+		u.metrics.DBTransactionCommit().Observe(time.Since(start))
+		u.metrics.DBActiveTransactions().Dec()
+	}
+
+	return err
 }
 
 func (u *unitOfWork) Rollback() error {
-	return u.tx.Rollback()
+	err := u.tx.Rollback()
+
+	// Decrement active transactions even on rollback
+	if u.metrics != nil {
+		u.metrics.DBActiveTransactions().Dec()
+	}
+
+	return err
 }

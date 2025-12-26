@@ -238,8 +238,8 @@ func (r *CulpritSearchRunner) RunLoop(ctx context.Context, sessionID string) err
 			if allDone {
 				return nil
 			}
-			// Wait briefly and retry
-			time.Sleep(10 * time.Millisecond)
+			// Wait briefly and retry (reduced from 10ms to 1ms for faster test execution)
+			time.Sleep(1 * time.Millisecond)
 			continue
 		}
 
@@ -387,32 +387,10 @@ func (r *CulpritSearchRunner) updateCheckWithResult(
 	stageID string,
 	result *domain.TestGroupResult,
 ) error {
-	// Transition check: PLANNING → PLANNED → WAITING → FINAL
-	plannedState := orchDomain.CheckStatePlanned
-	waitingState := orchDomain.CheckStateWaiting
+	// Transition check directly to FINAL state with result
+	// Optimization: Skip intermediate PLANNED/WAITING states - go directly to FINAL
 	finalState := orchDomain.CheckStateFinal
 
-	// PLANNING → PLANNED
-	if _, err := r.orchestrator.WriteNodes(ctx, &service.WriteNodesRequest{
-		WorkPlanID: workPlanID,
-		Checks: []*service.CheckWrite{
-			{ID: checkID, State: &plannedState},
-		},
-	}); err != nil {
-		return err
-	}
-
-	// PLANNED → WAITING
-	if _, err := r.orchestrator.WriteNodes(ctx, &service.WriteNodesRequest{
-		WorkPlanID: workPlanID,
-		Checks: []*service.CheckWrite{
-			{ID: checkID, State: &waitingState},
-		},
-	}); err != nil {
-		return err
-	}
-
-	// WAITING → FINAL with result
 	resultData := map[string]any{
 		"outcome":     result.Outcome.String(),
 		"duration_ms": result.Duration.Milliseconds(),
@@ -479,30 +457,9 @@ func (r *CulpritSearchRunner) updateDecodeCheck(
 ) error {
 	checkID := "decode"
 
-	// Transition check: PLANNING → PLANNED → WAITING → FINAL
-	plannedState := orchDomain.CheckStatePlanned
-	waitingState := orchDomain.CheckStateWaiting
+	// Transition check directly to FINAL state with result
+	// Optimization: Skip intermediate PLANNED/WAITING states - go directly to FINAL
 	finalState := orchDomain.CheckStateFinal
-
-	// PLANNING → PLANNED
-	if _, err := r.orchestrator.WriteNodes(ctx, &service.WriteNodesRequest{
-		WorkPlanID: workPlanID,
-		Checks: []*service.CheckWrite{
-			{ID: checkID, State: &plannedState},
-		},
-	}); err != nil {
-		return err
-	}
-
-	// PLANNED → WAITING
-	if _, err := r.orchestrator.WriteNodes(ctx, &service.WriteNodesRequest{
-		WorkPlanID: workPlanID,
-		Checks: []*service.CheckWrite{
-			{ID: checkID, State: &waitingState},
-		},
-	}); err != nil {
-		return err
-	}
 
 	// Build culprit data for storage
 	culpritsData := make([]map[string]any, len(result.IdentifiedCulprits))

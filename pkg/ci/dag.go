@@ -10,6 +10,12 @@ import (
 	"github.com/example/turboci-lite/internal/service"
 )
 
+// Ensure LocalOrchestrator implements Orchestrator
+var _ Orchestrator = (*LocalOrchestrator)(nil)
+
+// Ensure RemoteOrchestrator implements Orchestrator
+var _ Orchestrator = (*RemoteOrchestrator)(nil)
+
 // DAG represents a directed acyclic graph of workflow nodes.
 // Supports both static definition (before Execute) and dynamic additions (after Execute).
 type DAG struct {
@@ -234,7 +240,7 @@ func (n *StageNode) AfterIDs(stageIDs ...string) *StageNode {
 func (n *StageNode) ID() string { return n.stage.id }
 
 // Execute materializes the DAG into the orchestrator and starts execution.
-func (d *DAG) Execute(ctx context.Context, orch *service.OrchestratorService) (*WorkflowExecution, error) {
+func (d *DAG) Execute(ctx context.Context, orch Orchestrator) (*WorkflowExecution, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -432,7 +438,7 @@ func buildStageWrite(stage *dagStage) *service.StageWrite {
 
 // WorkflowExecution represents a running workflow.
 type WorkflowExecution struct {
-	orchestrator *service.OrchestratorService
+	orchestrator Orchestrator
 	workPlanID   string
 	dag          *DAG
 	pollInterval time.Duration
@@ -445,7 +451,7 @@ func (e *WorkflowExecution) WorkPlanID() string { return e.workPlanID }
 func (e *WorkflowExecution) DAG() *DAG { return e.dag }
 
 // Orchestrator returns the underlying orchestrator.
-func (e *WorkflowExecution) Orchestrator() *service.OrchestratorService { return e.orchestrator }
+func (e *WorkflowExecution) Orchestrator() Orchestrator { return e.orchestrator }
 
 // WaitForCompletion waits for all stages to complete.
 func (e *WorkflowExecution) WaitForCompletion(ctx context.Context) error {

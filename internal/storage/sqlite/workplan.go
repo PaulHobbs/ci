@@ -54,6 +54,42 @@ func (r *workPlanRepo) Get(ctx context.Context, id string) (*domain.WorkPlan, er
 	return wp, nil
 }
 
+func (r *workPlanRepo) List(ctx context.Context) ([]*domain.WorkPlan, error) {
+	rows, err := r.tx.QueryContext(ctx, `
+		SELECT id, metadata_json, created_at, updated_at, version
+		FROM work_plans
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var workPlans []*domain.WorkPlan
+	for rows.Next() {
+		wp := &domain.WorkPlan{}
+		var metadataJSON string
+
+		err := rows.Scan(&wp.ID, &metadataJSON, &wp.CreatedAt, &wp.UpdatedAt, &wp.Version)
+		if err != nil {
+			return nil, err
+		}
+
+		if metadataJSON != "" {
+			if err := json.Unmarshal([]byte(metadataJSON), &wp.Metadata); err != nil {
+				return nil, err
+			}
+		}
+		if wp.Metadata == nil {
+			wp.Metadata = make(map[string]string)
+		}
+
+		workPlans = append(workPlans, wp)
+	}
+
+	return workPlans, rows.Err()
+}
+
 func (r *workPlanRepo) Update(ctx context.Context, wp *domain.WorkPlan) error {
 	metadataJSON, err := json.Marshal(wp.Metadata)
 	if err != nil {

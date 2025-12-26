@@ -99,8 +99,9 @@ type CIController struct {
 	headRef   string
 	verbose   bool
 
-	orchestrator    pb.TurboCIOrchestratorClient    // gRPC client for diagnostics
-	orchestratorSvc *service.OrchestratorService   // internal service for pkg/ci
+	orchestrator    pb.TurboCIOrchestratorClient // gRPC client for diagnostics
+	orch            ci.Orchestrator              // pkg/ci interface for work plan operations
+	remoteOrch      *ci.RemoteOrchestrator       // if using remote, need to close connection
 	conn            *grpc.ClientConn
 	server          *grpc.Server
 	processes       []*exec.Cmd
@@ -111,16 +112,23 @@ type CIController struct {
 func (c *CIController) Run(ctx context.Context, orchestratorAddr string, grpcPort int, dbPath string) int {
 	var err error
 
-	// Kill any existing runners before starting anything
-	c.killExistingRunners(ctx)
-
 	// Start or connect to orchestrator
 	if orchestratorAddr != "" {
+		// Explicit address provided - don't kill existing runners
 		log.Printf("Connecting to existing orchestrator at %s", orchestratorAddr)
 		err = c.connectToOrchestrator(ctx, orchestratorAddr)
 	} else {
-		log.Printf("Starting embedded orchestrator on port %d", grpcPort)
-		err = c.startEmbeddedOrchestrator(ctx, grpcPort, dbPath)
+		// Try to connect to default address first (auto-detect running server)
+		defaultAddr := fmt.Sprintf("localhost:%d", grpcPort)
+		if c.tryConnect(ctx, defaultAddr) {
+			log.Printf("Detected running server at %s, connecting...", defaultAddr)
+			err = c.connectToOrchestrator(ctx, defaultAddr)
+		} else {
+			// No existing server - kill any stale runners and start embedded
+			c.killExistingRunners(ctx)
+			log.Printf("Starting embedded orchestrator on port %d", grpcPort)
+			err = c.startEmbeddedOrchestrator(ctx, grpcPort, dbPath)
+		}
 	}
 	if err != nil {
 		log.Printf("Failed to set up orchestrator: %v", err)
@@ -171,6 +179,24 @@ func (c *CIController) Run(ctx context.Context, orchestratorAddr string, grpcPor
 	}
 }
 
+// tryConnect attempts to connect to an orchestrator and returns true if successful.
+func (c *CIController) tryConnect(ctx context.Context, addr string) bool {
+	// Quick timeout for connection test
+	ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+
+	// Try a simple RPC to verify the server is responsive
+	client := pb.NewTurboCIOrchestratorClient(conn)
+	_, err = client.ListStageRunners(ctx, &pb.ListStageRunnersRequest{})
+	return err == nil
+}
+
 func (c *CIController) killExistingRunners(ctx context.Context) {
 	myPid := fmt.Sprintf("%d", os.Getpid())
 	ports := []int{50051, 50061, 50062, 50063, 50064, 50065, 50066}
@@ -200,6 +226,15 @@ func (c *CIController) connectToOrchestrator(ctx context.Context, addr string) e
 	}
 	c.conn = conn
 	c.orchestrator = pb.NewTurboCIOrchestratorClient(conn)
+
+	// Also create RemoteOrchestrator for pkg/ci usage
+	remoteOrch, err := ci.NewRemoteOrchestrator(addr)
+	if err != nil {
+		conn.Close()
+		return fmt.Errorf("failed to create remote orchestrator: %w", err)
+	}
+	c.remoteOrch = remoteOrch
+	c.orch = remoteOrch
 	return nil
 }
 
@@ -225,7 +260,7 @@ func (c *CIController) startEmbeddedOrchestrator(ctx context.Context, port int, 
 
 	// Create services (matching cmd/server/main.go pattern)
 	orchestratorSvc := service.NewOrchestrator(store)
-	c.orchestratorSvc = orchestratorSvc // Store for pkg/ci usage
+	c.orch = ci.NewLocalOrchestrator(orchestratorSvc) // Store for pkg/ci usage
 	runnerSvc := service.NewRunnerService(store)
 	callbackSvc := service.NewCallbackService(store, orchestratorSvc)
 
@@ -381,7 +416,7 @@ func (c *CIController) createWorkPlan(ctx context.Context) (*ci.WorkflowExecutio
 		After(triggerStage)
 
 	// Execute the DAG
-	exec, err := dag.Execute(ctx, c.orchestratorSvc)
+	exec, err := dag.Execute(ctx, c.orch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute workflow: %w", err)
 	}
@@ -483,7 +518,7 @@ func (c *CIController) cleanup() {
 		if cmd.Process != nil {
 			// Signal the entire process group
 			syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
-			
+
 			// Give it a moment to exit gracefully
 			done := make(chan error, 1)
 			go func() { done <- cmd.Wait() }()
@@ -493,6 +528,11 @@ func (c *CIController) cleanup() {
 				syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 			}
 		}
+	}
+
+	// Close remote orchestrator if used
+	if c.remoteOrch != nil {
+		c.remoteOrch.Close()
 	}
 
 	// Close connection
