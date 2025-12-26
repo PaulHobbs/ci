@@ -11,6 +11,12 @@ import (
 	"runtime"
 	"syscall"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/structpb"
+
+	pb "github.com/example/turboci-lite/gen/turboci/v1"
+	"github.com/example/turboci-lite/internal/domain"
 	"github.com/example/turboci-lite/internal/endpoint"
 	"github.com/example/turboci-lite/internal/observability"
 	"github.com/example/turboci-lite/internal/service"
@@ -75,6 +81,15 @@ func main() {
 
 	// Wire orchestrator to dispatcher for event-driven dispatch
 	orchestratorSvc.SetDispatcher(dispatcher)
+
+	// Create gRPC client factory for dispatcher to call runners
+	dispatcher.SetClientFactory(func(addr string) (service.StageRunnerClient, error) {
+		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			return nil, err
+		}
+		return &grpcRunnerClient{client: pb.NewStageRunnerClient(conn), conn: conn}, nil
+	})
 
 	// Create endpoints
 	endpoints := endpoint.MakeEndpoints(orchestratorSvc)
@@ -154,4 +169,135 @@ func loadConfig() Config {
 	}
 
 	return cfg
+}
+
+// grpcRunnerClient wraps a gRPC client to implement StageRunnerClient
+type grpcRunnerClient struct {
+	client pb.StageRunnerClient
+	conn   *grpc.ClientConn
+}
+
+func (c *grpcRunnerClient) Run(ctx context.Context, req *service.RunRequest) (*service.RunResponse, error) {
+	// Convert service types to proto types
+	pbReq := &pb.RunRequest{
+		ExecutionId: req.ExecutionID,
+		WorkPlanId:  req.WorkPlanID,
+		StageId:     req.StageID,
+		AttemptIdx:  int32(req.AttemptIdx),
+	}
+
+	// Convert stage args
+	if req.Args != nil {
+		pbReq.Args, _ = structpb.NewStruct(req.Args)
+	}
+
+	// Convert check options
+	for _, opt := range req.CheckOptions {
+		pbOpt := &pb.CheckOptions{
+			CheckId: opt.CheckID,
+			Kind:    opt.Kind,
+		}
+		if opt.Options != nil {
+			pbOpt.Options, _ = structpb.NewStruct(opt.Options)
+		}
+		pbReq.CheckOptions = append(pbReq.CheckOptions, pbOpt)
+		pbReq.AssignedCheckIds = append(pbReq.AssignedCheckIds, opt.CheckID)
+	}
+
+	pbResp, err := c.client.Run(ctx, pbReq)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &service.RunResponse{
+		StageState: convertStageState(pbResp.StageState),
+	}
+
+	for _, update := range pbResp.CheckUpdates {
+		cu := &service.CheckUpdate{
+			CheckID:  update.CheckId,
+			State:    convertCheckState(update.State),
+			Finalize: update.Finalize,
+		}
+		if update.ResultData != nil {
+			cu.Data = update.ResultData.AsMap()
+		}
+		if update.Failure != nil {
+			cu.Failure = &domain.Failure{Message: update.Failure.Message}
+		}
+		resp.CheckUpdates = append(resp.CheckUpdates, cu)
+	}
+
+	if pbResp.Failure != nil {
+		resp.Failure = &domain.Failure{Message: pbResp.Failure.Message}
+	}
+
+	return resp, nil
+}
+
+func (c *grpcRunnerClient) RunAsync(ctx context.Context, req *service.RunAsyncRequest) (*service.RunAsyncResponse, error) {
+	pbReq := &pb.RunAsyncRequest{
+		ExecutionId: req.ExecutionID,
+		WorkPlanId:  req.WorkPlanID,
+		StageId:     req.StageID,
+		AttemptIdx:  int32(req.AttemptIdx),
+	}
+
+	if req.Args != nil {
+		pbReq.Args, _ = structpb.NewStruct(req.Args)
+	}
+
+	for _, opt := range req.CheckOptions {
+		pbOpt := &pb.CheckOptions{
+			CheckId: opt.CheckID,
+			Kind:    opt.Kind,
+		}
+		if opt.Options != nil {
+			pbOpt.Options, _ = structpb.NewStruct(opt.Options)
+		}
+		pbReq.CheckOptions = append(pbReq.CheckOptions, pbOpt)
+	}
+
+	pbResp, err := c.client.RunAsync(ctx, pbReq)
+	if err != nil {
+		return nil, err
+	}
+
+	return &service.RunAsyncResponse{Accepted: pbResp.Accepted}, nil
+}
+
+func (c *grpcRunnerClient) Ping(ctx context.Context, req *service.PingRequest) (*service.PingResponse, error) {
+	pbResp, err := c.client.Ping(ctx, &pb.PingRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return &service.PingResponse{Healthy: pbResp.AvailableCapacity > 0}, nil
+}
+
+func convertStageState(s pb.StageState) domain.StageState {
+	switch s {
+	case pb.StageState_STAGE_STATE_PLANNED:
+		return domain.StageStatePlanned
+	case pb.StageState_STAGE_STATE_ATTEMPTING:
+		return domain.StageStateAttempting
+	case pb.StageState_STAGE_STATE_AWAITING_GROUP:
+		return domain.StageStateAwaitingGroup
+	case pb.StageState_STAGE_STATE_FINAL:
+		return domain.StageStateFinal
+	default:
+		return domain.StageStateUnknown
+	}
+}
+
+func convertCheckState(s pb.CheckState) domain.CheckState {
+	switch s {
+	case pb.CheckState_CHECK_STATE_PLANNED:
+		return domain.CheckStatePlanned
+	case pb.CheckState_CHECK_STATE_WAITING:
+		return domain.CheckStateWaiting
+	case pb.CheckState_CHECK_STATE_FINAL:
+		return domain.CheckStateFinal
+	default:
+		return domain.CheckStateUnknown
+	}
 }

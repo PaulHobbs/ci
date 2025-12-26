@@ -53,8 +53,8 @@ func NewWithMetrics(path string, metrics *observability.Metrics) (*SQLiteStorage
 	// Allow multiple connections for concurrent read transactions.
 	// WAL mode (enabled for file-based DBs) handles write serialization safely.
 	// Without this, multiple goroutines trying to begin transactions will deadlock.
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(10)
 
 	return &SQLiteStorage{db: db, metrics: metrics}, nil
 }

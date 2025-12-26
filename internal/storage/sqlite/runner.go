@@ -24,9 +24,16 @@ func (r *stageRunnerRepo) Register(ctx context.Context, runner *domain.StageRunn
 		return err
 	}
 
-	// Use INSERT OR REPLACE to update existing registration
+	// Delete any existing registration for the same runner ID to avoid duplicates.
+	// This ensures re-registering a runner replaces the old registration.
+	_, err = r.tx.ExecContext(ctx, `DELETE FROM stage_runners WHERE id = ?`, runner.ID)
+	if err != nil {
+		return err
+	}
+
+	// Insert the new registration
 	_, err = r.tx.ExecContext(ctx, `
-		INSERT OR REPLACE INTO stage_runners (
+		INSERT INTO stage_runners (
 			registration_id, id, runner_type, address, supported_modes_json,
 			max_concurrent, current_load, metadata_json, registered_at, last_heartbeat, expires_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

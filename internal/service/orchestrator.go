@@ -17,13 +17,56 @@ type dependencyCache struct {
 	stages         []*domain.Stage
 	finalizedNodes map[string]bool // "type:id" → finalized
 	loaded         bool
+
+	// Incremental tracking for this batch
+	newlyFinalizedChecks []string          // Check IDs that became final in this batch
+	newlyFinalizedStages []string          // Stage IDs that became final in this batch
+	writtenChecks        map[string]bool   // Check IDs written in this batch
+	writtenStages        map[string]bool   // Stage IDs written in this batch
+	priorCheckStates     map[string]domain.CheckState // State before this batch
+	priorStageStates     map[string]domain.StageState // State before this batch
 }
 
 func newDependencyCache() *dependencyCache {
 	return &dependencyCache{
-		finalizedNodes: make(map[string]bool),
-		loaded:         false,
+		finalizedNodes:   make(map[string]bool),
+		loaded:           false,
+		writtenChecks:    make(map[string]bool),
+		writtenStages:    make(map[string]bool),
+		priorCheckStates: make(map[string]domain.CheckState),
+		priorStageStates: make(map[string]domain.StageState),
 	}
+}
+
+// trackCheckWrite records a check write and its prior state for incremental resolution.
+func (c *dependencyCache) trackCheckWrite(id string, priorState domain.CheckState, newState domain.CheckState) {
+	c.writtenChecks[id] = true
+	if _, exists := c.priorCheckStates[id]; !exists {
+		c.priorCheckStates[id] = priorState
+	}
+	// Track if it became finalized
+	if newState == domain.CheckStateFinal && priorState != domain.CheckStateFinal {
+		c.newlyFinalizedChecks = append(c.newlyFinalizedChecks, id)
+		c.finalizedNodes[string(domain.NodeTypeCheck)+":"+id] = true
+	}
+}
+
+// trackStageWrite records a stage write and its prior state for incremental resolution.
+func (c *dependencyCache) trackStageWrite(id string, priorState domain.StageState, newState domain.StageState) {
+	c.writtenStages[id] = true
+	if _, exists := c.priorStageStates[id]; !exists {
+		c.priorStageStates[id] = priorState
+	}
+	// Track if it became finalized
+	if newState == domain.StageStateFinal && priorState != domain.StageStateFinal {
+		c.newlyFinalizedStages = append(c.newlyFinalizedStages, id)
+		c.finalizedNodes[string(domain.NodeTypeStage)+":"+id] = true
+	}
+}
+
+// hasNewlyFinalized returns true if any nodes became finalized in this batch.
+func (c *dependencyCache) hasNewlyFinalized() bool {
+	return len(c.newlyFinalizedChecks) > 0 || len(c.newlyFinalizedStages) > 0
 }
 
 // OrchestratorService provides the core workflow orchestration logic.
@@ -174,7 +217,7 @@ func (s *OrchestratorService) WriteNodes(ctx context.Context, req *WriteNodesReq
 
 	// Process checks
 	for _, cw := range req.Checks {
-		check, err := s.writeCheck(ctx, uow, req.WorkPlanID, cw)
+		check, err := s.writeCheck(ctx, uow, req.WorkPlanID, cw, cache)
 		if err != nil {
 			return nil, fmt.Errorf("failed to write check %s: %w", cw.ID, err)
 		}
@@ -183,7 +226,7 @@ func (s *OrchestratorService) WriteNodes(ctx context.Context, req *WriteNodesReq
 
 	// Process stages
 	for _, sw := range req.Stages {
-		stage, err := s.writeStage(ctx, uow, req.WorkPlanID, sw)
+		stage, err := s.writeStage(ctx, uow, req.WorkPlanID, sw, cache)
 		if err != nil {
 			return nil, fmt.Errorf("failed to write stage %s: %w", sw.ID, err)
 		}
@@ -264,16 +307,20 @@ func (s *OrchestratorService) QueryNodes(ctx context.Context, req *QueryNodesReq
 }
 
 // writeCheck creates or updates a check.
-func (s *OrchestratorService) writeCheck(ctx context.Context, uow storage.UnitOfWork, workPlanID string, cw *CheckWrite) (*domain.Check, error) {
+func (s *OrchestratorService) writeCheck(ctx context.Context, uow storage.UnitOfWork, workPlanID string, cw *CheckWrite, cache *dependencyCache) (*domain.Check, error) {
 	// Try to get existing check
 	var isNew bool
+	var priorState domain.CheckState
 	check, err := uow.Checks().Get(ctx, workPlanID, cw.ID)
 	if err == domain.ErrNotFound {
 		// Create new check
 		check = domain.NewCheck(workPlanID, cw.ID)
 		isNew = true
+		priorState = domain.CheckStatePlanned // New checks start as planned
 	} else if err != nil {
 		return nil, err
+	} else {
+		priorState = check.State
 	}
 
 	// Update fields
@@ -330,20 +377,27 @@ func (s *OrchestratorService) writeCheck(ctx context.Context, uow storage.UnitOf
 		}
 	}
 
+	// Track state change for incremental dependency resolution
+	cache.trackCheckWrite(check.ID, priorState, check.State)
+
 	return check, nil
 }
 
 // writeStage creates or updates a stage.
-func (s *OrchestratorService) writeStage(ctx context.Context, uow storage.UnitOfWork, workPlanID string, sw *StageWrite) (*domain.Stage, error) {
+func (s *OrchestratorService) writeStage(ctx context.Context, uow storage.UnitOfWork, workPlanID string, sw *StageWrite, cache *dependencyCache) (*domain.Stage, error) {
 	// Try to get existing stage
 	var isNew bool
+	var priorState domain.StageState
 	stage, err := uow.Stages().Get(ctx, workPlanID, sw.ID)
 	if err == domain.ErrNotFound {
 		// Create new stage
 		stage = domain.NewStage(workPlanID, sw.ID)
 		isNew = true
+		priorState = domain.StageStatePlanned // New stages start as planned
 	} else if err != nil {
 		return nil, err
+	} else {
+		priorState = stage.State
 	}
 
 	stageModified := isNew // Track if the stage itself needs updating
@@ -437,6 +491,9 @@ func (s *OrchestratorService) writeStage(ctx context.Context, uow storage.UnitOf
 			}
 		}
 	}
+
+	// Track state change for incremental dependency resolution
+	cache.trackStageWrite(stage.ID, priorState, stage.State)
 
 	return stage, nil
 }

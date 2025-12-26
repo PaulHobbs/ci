@@ -199,8 +199,8 @@ func (r *stageRepo) Update(ctx context.Context, stage *domain.Stage) error {
 }
 
 func (r *stageRepo) List(ctx context.Context, workPlanID string, opts storage.ListOptions) ([]*domain.Stage, error) {
-	query := `SELECT id, work_plan_id, state, args_json, assignments_json, dependencies_json, execution_mode, runner_type, created_at, updated_at, version
-		FROM stages WHERE work_plan_id = ?`
+	// Build stage filter conditions
+	stageFilter := "s.work_plan_id = ?"
 	args := []any{workPlanID}
 
 	if len(opts.IDs) > 0 {
@@ -209,7 +209,7 @@ func (r *stageRepo) List(ctx context.Context, workPlanID string, opts storage.Li
 			placeholders[i] = "?"
 			args = append(args, id)
 		}
-		query += " AND id IN (" + strings.Join(placeholders, ",") + ")"
+		stageFilter += " AND s.id IN (" + strings.Join(placeholders, ",") + ")"
 	}
 
 	if len(opts.StageStates) > 0 {
@@ -218,18 +218,62 @@ func (r *stageRepo) List(ctx context.Context, workPlanID string, opts storage.Li
 			placeholders[i] = "?"
 			args = append(args, state)
 		}
-		query += " AND state IN (" + strings.Join(placeholders, ",") + ")"
+		stageFilter += " AND s.state IN (" + strings.Join(placeholders, ",") + ")"
 	}
 
-	query += " ORDER BY created_at"
+	// Use a single JOIN query to fetch stages and attempts together
+	query := `
+		SELECT s.id, s.work_plan_id, s.state, s.args_json, s.assignments_json, s.dependencies_json,
+		       s.execution_mode, s.runner_type, s.created_at, s.updated_at, s.version,
+		       sa.idx, sa.state, sa.process_uid, sa.details_json, sa.progress_json,
+		       sa.created_at, sa.updated_at, sa.failure_message, sa.failure_at
+		FROM stages s
+		LEFT JOIN stage_attempts sa ON s.work_plan_id = sa.work_plan_id AND s.id = sa.stage_id
+		WHERE ` + stageFilter + `
+		ORDER BY s.created_at, s.id, sa.idx`
 
-	if opts.Limit > 0 {
-		query += " LIMIT ?"
-		args = append(args, opts.Limit)
-	}
-	if opts.Offset > 0 {
-		query += " OFFSET ?"
-		args = append(args, opts.Offset)
+	// Apply LIMIT/OFFSET to a subquery for stages, not the joined result
+	if opts.Limit > 0 || opts.Offset > 0 {
+		subquery := `SELECT id FROM stages WHERE work_plan_id = ?`
+		subArgs := []any{workPlanID}
+
+		if len(opts.IDs) > 0 {
+			placeholders := make([]string, len(opts.IDs))
+			for i, id := range opts.IDs {
+				placeholders[i] = "?"
+				subArgs = append(subArgs, id)
+			}
+			subquery += " AND id IN (" + strings.Join(placeholders, ",") + ")"
+		}
+		if len(opts.StageStates) > 0 {
+			placeholders := make([]string, len(opts.StageStates))
+			for i, state := range opts.StageStates {
+				placeholders[i] = "?"
+				subArgs = append(subArgs, state)
+			}
+			subquery += " AND state IN (" + strings.Join(placeholders, ",") + ")"
+		}
+
+		subquery += " ORDER BY created_at"
+		if opts.Limit > 0 {
+			subquery += " LIMIT ?"
+			subArgs = append(subArgs, opts.Limit)
+		}
+		if opts.Offset > 0 {
+			subquery += " OFFSET ?"
+			subArgs = append(subArgs, opts.Offset)
+		}
+
+		query = `
+			SELECT s.id, s.work_plan_id, s.state, s.args_json, s.assignments_json, s.dependencies_json,
+			       s.execution_mode, s.runner_type, s.created_at, s.updated_at, s.version,
+			       sa.idx, sa.state, sa.process_uid, sa.details_json, sa.progress_json,
+			       sa.created_at, sa.updated_at, sa.failure_message, sa.failure_at
+			FROM stages s
+			LEFT JOIN stage_attempts sa ON s.work_plan_id = sa.work_plan_id AND s.id = sa.stage_id
+			WHERE s.work_plan_id = ? AND s.id IN (` + subquery + `)
+			ORDER BY s.created_at, s.id, sa.idx`
+		args = append([]any{workPlanID}, subArgs...)
 	}
 
 	rows, err := r.tx.QueryContext(ctx, query, args...)
@@ -238,55 +282,110 @@ func (r *stageRepo) List(ctx context.Context, workPlanID string, opts storage.Li
 	}
 	defer rows.Close()
 
-	var stages []*domain.Stage
+	// Group attempts by stage ID
+	stageMap := make(map[string]*domain.Stage)
+	var stageOrder []string
+
 	for rows.Next() {
-		stage := &domain.Stage{}
-		var argsJSON, assignmentsJSON, depsJSON string
+		var stageID, argsJSON, assignmentsJSON, depsJSON string
+		var stage domain.Stage
 		var runnerType sql.NullString
 
-		err := rows.Scan(&stage.ID, &stage.WorkPlanID, &stage.State,
-			&argsJSON, &assignmentsJSON, &depsJSON, &stage.ExecutionMode, &runnerType,
-			&stage.CreatedAt, &stage.UpdatedAt, &stage.Version)
+		// Attempt columns (nullable due to LEFT JOIN)
+		var attemptIdx sql.NullInt64
+		var attemptState sql.NullInt64
+		var attemptProcessUID sql.NullString
+		var attemptDetailsJSON, attemptProgressJSON sql.NullString
+		var attemptCreatedAt, attemptUpdatedAt sql.NullTime
+		var attemptFailureMessage sql.NullString
+		var attemptFailureAt sql.NullTime
+
+		err := rows.Scan(
+			&stageID, &stage.WorkPlanID, &stage.State,
+			&argsJSON, &assignmentsJSON, &depsJSON,
+			&stage.ExecutionMode, &runnerType, &stage.CreatedAt, &stage.UpdatedAt, &stage.Version,
+			&attemptIdx, &attemptState, &attemptProcessUID, &attemptDetailsJSON, &attemptProgressJSON,
+			&attemptCreatedAt, &attemptUpdatedAt, &attemptFailureMessage, &attemptFailureAt,
+		)
 		if err != nil {
 			return nil, err
 		}
 
-		if runnerType.Valid {
-			stage.RunnerType = runnerType.String
-		}
-
-		if argsJSON != "" {
-			if err := json.Unmarshal([]byte(argsJSON), &stage.Args); err != nil {
-				return nil, err
+		// Get or create stage entry
+		existing, exists := stageMap[stageID]
+		if !exists {
+			stage.ID = stageID
+			if runnerType.Valid {
+				stage.RunnerType = runnerType.String
 			}
-		}
-		if stage.Args == nil {
-			stage.Args = make(map[string]any)
-		}
-
-		if assignmentsJSON != "" && assignmentsJSON != "null" {
-			if err := json.Unmarshal([]byte(assignmentsJSON), &stage.Assignments); err != nil {
-				return nil, err
+			if argsJSON != "" {
+				if err := json.Unmarshal([]byte(argsJSON), &stage.Args); err != nil {
+					return nil, err
+				}
 			}
-		}
-
-		if depsJSON != "" && depsJSON != "null" {
-			if err := json.Unmarshal([]byte(depsJSON), &stage.Dependencies); err != nil {
-				return nil, err
+			if stage.Args == nil {
+				stage.Args = make(map[string]any)
 			}
+			if assignmentsJSON != "" && assignmentsJSON != "null" {
+				if err := json.Unmarshal([]byte(assignmentsJSON), &stage.Assignments); err != nil {
+					return nil, err
+				}
+			}
+			if depsJSON != "" && depsJSON != "null" {
+				if err := json.Unmarshal([]byte(depsJSON), &stage.Dependencies); err != nil {
+					return nil, err
+				}
+			}
+			existing = &stage
+			stageMap[stageID] = existing
+			stageOrder = append(stageOrder, stageID)
 		}
 
-		// Load attempts for each stage
-		attempts, err := r.loadAttempts(ctx, workPlanID, stage.ID)
-		if err != nil {
-			return nil, err
+		// Add attempt if present (LEFT JOIN may yield NULL)
+		if attemptIdx.Valid {
+			attempt := domain.Attempt{
+				Idx:       int(attemptIdx.Int64),
+				State:     domain.AttemptState(attemptState.Int64),
+				CreatedAt: attemptCreatedAt.Time,
+				UpdatedAt: attemptUpdatedAt.Time,
+			}
+			if attemptProcessUID.Valid {
+				attempt.ProcessUID = attemptProcessUID.String
+			}
+			if attemptDetailsJSON.Valid && attemptDetailsJSON.String != "" {
+				if err := json.Unmarshal([]byte(attemptDetailsJSON.String), &attempt.Details); err != nil {
+					return nil, err
+				}
+			}
+			if attempt.Details == nil {
+				attempt.Details = make(map[string]any)
+			}
+			if attemptProgressJSON.Valid && attemptProgressJSON.String != "" {
+				if err := json.Unmarshal([]byte(attemptProgressJSON.String), &attempt.Progress); err != nil {
+					return nil, err
+				}
+			}
+			if attemptFailureMessage.Valid && attemptFailureAt.Valid {
+				attempt.Failure = &domain.Failure{
+					Message:    attemptFailureMessage.String,
+					OccurredAt: attemptFailureAt.Time,
+				}
+			}
+			existing.Attempts = append(existing.Attempts, attempt)
 		}
-		stage.Attempts = attempts
-
-		stages = append(stages, stage)
 	}
 
-	return stages, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Return stages in original order
+	stages := make([]*domain.Stage, 0, len(stageOrder))
+	for _, id := range stageOrder {
+		stages = append(stages, stageMap[id])
+	}
+
+	return stages, nil
 }
 
 func (r *stageRepo) Delete(ctx context.Context, workPlanID, stageID string) error {

@@ -203,8 +203,10 @@ func (c *CIController) tryConnect(ctx context.Context, addr string) bool {
 
 func (c *CIController) killExistingRunners(ctx context.Context) {
 	myPid := fmt.Sprintf("%d", os.Getpid())
-	ports := []int{50051, 50061, 50062, 50063, 50064, 50065, 50066}
-	for _, port := range ports {
+	// Only kill runner ports, not the server port (50051) - we want to preserve
+	// any running server so make ci can connect to it
+	runnerPorts := []int{50061, 50062, 50063, 50064, 50065, 50066}
+	for _, port := range runnerPorts {
 		// Use lsof to find PID listening on port
 		cmd := exec.CommandContext(ctx, "lsof", "-t", fmt.Sprintf("-i:%d", port))
 		output, err := cmd.Output()
@@ -214,7 +216,7 @@ func (c *CIController) killExistingRunners(ctx context.Context) {
 				if pid == myPid {
 					continue
 				}
-				log.Printf("Killing legacy process %s listening on port %d", pid, port)
+				log.Printf("Killing stale runner process %s listening on port %d", pid, port)
 				exec.Command("kill", "-9", pid).Run()
 			}
 		}
@@ -273,6 +275,9 @@ func (c *CIController) startEmbeddedOrchestrator(ctx context.Context, port int, 
 	dispatcherCfg.PollInterval = 50 * time.Millisecond
 	dispatcherCfg.CallbackAddress = fmt.Sprintf("localhost:%d", port)
 	dispatcher := service.NewDispatcher(store, runnerSvc, orchestratorSvc, dispatcherCfg)
+
+	// Wire orchestrator to dispatcher for event-driven dispatch
+	orchestratorSvc.SetDispatcher(dispatcher)
 
 	// Create gRPC client factory for dispatcher
 	dispatcher.SetClientFactory(func(addr string) (service.StageRunnerClient, error) {

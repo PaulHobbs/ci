@@ -170,8 +170,8 @@ func (r *checkRepo) Update(ctx context.Context, check *domain.Check) error {
 }
 
 func (r *checkRepo) List(ctx context.Context, workPlanID string, opts storage.ListOptions) ([]*domain.Check, error) {
-	query := `SELECT id, work_plan_id, state, kind, options_json, dependencies_json, created_at, updated_at, version
-		FROM checks WHERE work_plan_id = ?`
+	// Build check filter conditions
+	checkFilter := "c.work_plan_id = ?"
 	args := []any{workPlanID}
 
 	if len(opts.IDs) > 0 {
@@ -180,7 +180,7 @@ func (r *checkRepo) List(ctx context.Context, workPlanID string, opts storage.Li
 			placeholders[i] = "?"
 			args = append(args, id)
 		}
-		query += " AND id IN (" + strings.Join(placeholders, ",") + ")"
+		checkFilter += " AND c.id IN (" + strings.Join(placeholders, ",") + ")"
 	}
 
 	if len(opts.CheckStates) > 0 {
@@ -189,18 +189,62 @@ func (r *checkRepo) List(ctx context.Context, workPlanID string, opts storage.Li
 			placeholders[i] = "?"
 			args = append(args, state)
 		}
-		query += " AND state IN (" + strings.Join(placeholders, ",") + ")"
+		checkFilter += " AND c.state IN (" + strings.Join(placeholders, ",") + ")"
 	}
 
-	query += " ORDER BY created_at"
+	// Use a single JOIN query to fetch checks and results together
+	query := `
+		SELECT c.id, c.work_plan_id, c.state, c.kind, c.options_json, c.dependencies_json,
+		       c.created_at, c.updated_at, c.version,
+		       cr.id, cr.owner_type, cr.owner_id, cr.data_json, cr.created_at,
+		       cr.finalized_at, cr.failure_message, cr.failure_at
+		FROM checks c
+		LEFT JOIN check_results cr ON c.work_plan_id = cr.work_plan_id AND c.id = cr.check_id
+		WHERE ` + checkFilter + `
+		ORDER BY c.created_at, c.id, cr.id`
 
-	if opts.Limit > 0 {
-		query += " LIMIT ?"
-		args = append(args, opts.Limit)
-	}
-	if opts.Offset > 0 {
-		query += " OFFSET ?"
-		args = append(args, opts.Offset)
+	// Apply LIMIT/OFFSET to a subquery for checks, not the joined result
+	if opts.Limit > 0 || opts.Offset > 0 {
+		subquery := `SELECT id FROM checks WHERE work_plan_id = ?`
+		subArgs := []any{workPlanID}
+
+		if len(opts.IDs) > 0 {
+			placeholders := make([]string, len(opts.IDs))
+			for i, id := range opts.IDs {
+				placeholders[i] = "?"
+				subArgs = append(subArgs, id)
+			}
+			subquery += " AND id IN (" + strings.Join(placeholders, ",") + ")"
+		}
+		if len(opts.CheckStates) > 0 {
+			placeholders := make([]string, len(opts.CheckStates))
+			for i, state := range opts.CheckStates {
+				placeholders[i] = "?"
+				subArgs = append(subArgs, state)
+			}
+			subquery += " AND state IN (" + strings.Join(placeholders, ",") + ")"
+		}
+
+		subquery += " ORDER BY created_at"
+		if opts.Limit > 0 {
+			subquery += " LIMIT ?"
+			subArgs = append(subArgs, opts.Limit)
+		}
+		if opts.Offset > 0 {
+			subquery += " OFFSET ?"
+			subArgs = append(subArgs, opts.Offset)
+		}
+
+		query = `
+			SELECT c.id, c.work_plan_id, c.state, c.kind, c.options_json, c.dependencies_json,
+			       c.created_at, c.updated_at, c.version,
+			       cr.id, cr.owner_type, cr.owner_id, cr.data_json, cr.created_at,
+			       cr.finalized_at, cr.failure_message, cr.failure_at
+			FROM checks c
+			LEFT JOIN check_results cr ON c.work_plan_id = cr.work_plan_id AND c.id = cr.check_id
+			WHERE c.work_plan_id = ? AND c.id IN (` + subquery + `)
+			ORDER BY c.created_at, c.id, cr.id`
+		args = append([]any{workPlanID}, subArgs...)
 	}
 
 	rows, err := r.tx.QueryContext(ctx, query, args...)
@@ -209,43 +253,95 @@ func (r *checkRepo) List(ctx context.Context, workPlanID string, opts storage.Li
 	}
 	defer rows.Close()
 
-	var checks []*domain.Check
+	// Group results by check ID
+	checkMap := make(map[string]*domain.Check)
+	var checkOrder []string
+
 	for rows.Next() {
-		check := &domain.Check{}
-		var optionsJSON, depsJSON string
+		var checkID, optionsJSON, depsJSON string
+		var check domain.Check
 
-		err := rows.Scan(&check.ID, &check.WorkPlanID, &check.State, &check.Kind,
-			&optionsJSON, &depsJSON, &check.CreatedAt, &check.UpdatedAt, &check.Version)
+		// Result columns (nullable due to LEFT JOIN)
+		var resultID sql.NullInt64
+		var resultOwnerType, resultOwnerID sql.NullString
+		var resultDataJSON sql.NullString
+		var resultCreatedAt sql.NullTime
+		var resultFinalizedAt sql.NullTime
+		var resultFailureMessage sql.NullString
+		var resultFailureAt sql.NullTime
+
+		err := rows.Scan(
+			&checkID, &check.WorkPlanID, &check.State, &check.Kind,
+			&optionsJSON, &depsJSON, &check.CreatedAt, &check.UpdatedAt, &check.Version,
+			&resultID, &resultOwnerType, &resultOwnerID, &resultDataJSON, &resultCreatedAt,
+			&resultFinalizedAt, &resultFailureMessage, &resultFailureAt,
+		)
 		if err != nil {
 			return nil, err
 		}
 
-		if optionsJSON != "" {
-			if err := json.Unmarshal([]byte(optionsJSON), &check.Options); err != nil {
-				return nil, err
+		// Get or create check entry
+		existing, exists := checkMap[checkID]
+		if !exists {
+			check.ID = checkID
+			if optionsJSON != "" {
+				if err := json.Unmarshal([]byte(optionsJSON), &check.Options); err != nil {
+					return nil, err
+				}
 			}
-		}
-		if check.Options == nil {
-			check.Options = make(map[string]any)
-		}
-
-		if depsJSON != "" && depsJSON != "null" {
-			if err := json.Unmarshal([]byte(depsJSON), &check.Dependencies); err != nil {
-				return nil, err
+			if check.Options == nil {
+				check.Options = make(map[string]any)
 			}
+			if depsJSON != "" && depsJSON != "null" {
+				if err := json.Unmarshal([]byte(depsJSON), &check.Dependencies); err != nil {
+					return nil, err
+				}
+			}
+			existing = &check
+			checkMap[checkID] = existing
+			checkOrder = append(checkOrder, checkID)
 		}
 
-		// Load results for each check
-		results, err := r.loadResults(ctx, workPlanID, check.ID)
-		if err != nil {
-			return nil, err
+		// Add result if present (LEFT JOIN may yield NULL)
+		if resultID.Valid {
+			result := domain.CheckResult{
+				ID:        resultID.Int64,
+				OwnerType: resultOwnerType.String,
+				OwnerID:   resultOwnerID.String,
+				CreatedAt: resultCreatedAt.Time,
+			}
+			if resultDataJSON.Valid && resultDataJSON.String != "" {
+				if err := json.Unmarshal([]byte(resultDataJSON.String), &result.Data); err != nil {
+					return nil, err
+				}
+			}
+			if result.Data == nil {
+				result.Data = make(map[string]any)
+			}
+			if resultFinalizedAt.Valid {
+				result.FinalizedAt = &resultFinalizedAt.Time
+			}
+			if resultFailureMessage.Valid && resultFailureAt.Valid {
+				result.Failure = &domain.Failure{
+					Message:    resultFailureMessage.String,
+					OccurredAt: resultFailureAt.Time,
+				}
+			}
+			existing.Results = append(existing.Results, result)
 		}
-		check.Results = results
-
-		checks = append(checks, check)
 	}
 
-	return checks, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Return checks in original order
+	checks := make([]*domain.Check, 0, len(checkOrder))
+	for _, id := range checkOrder {
+		checks = append(checks, checkMap[id])
+	}
+
+	return checks, nil
 }
 
 func (r *checkRepo) Delete(ctx context.Context, workPlanID, checkID string) error {
