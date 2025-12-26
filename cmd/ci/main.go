@@ -112,9 +112,14 @@ type CIController struct {
 func (c *CIController) Run(ctx context.Context, orchestratorAddr string, grpcPort int, dbPath string) int {
 	var err error
 
+	// Always kill stale runners before starting new ones (except when explicit address provided)
+	if orchestratorAddr == "" {
+		c.killExistingRunners(ctx)
+	}
+
 	// Start or connect to orchestrator
 	if orchestratorAddr != "" {
-		// Explicit address provided - don't kill existing runners
+		// Explicit address provided
 		log.Printf("Connecting to existing orchestrator at %s", orchestratorAddr)
 		err = c.connectToOrchestrator(ctx, orchestratorAddr)
 	} else {
@@ -124,8 +129,7 @@ func (c *CIController) Run(ctx context.Context, orchestratorAddr string, grpcPor
 			log.Printf("Detected running server at %s, connecting...", defaultAddr)
 			err = c.connectToOrchestrator(ctx, defaultAddr)
 		} else {
-			// No existing server - kill any stale runners and start embedded
-			c.killExistingRunners(ctx)
+			// No existing server - start embedded
 			log.Printf("Starting embedded orchestrator on port %d", grpcPort)
 			err = c.startEmbeddedOrchestrator(ctx, grpcPort, dbPath)
 		}
