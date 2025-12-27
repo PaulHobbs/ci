@@ -2,38 +2,40 @@
   CI REPORT - PASSED
 =============================================================
 
-Work Plan: 88031037-6794-4fea-a97a-877c983592af
-Duration:  4.052578s
-Started:   2025-12-27T09:49:16-08:00
-Ended:     2025-12-27T09:49:20-08:00
+Work Plan: 2e80270c-c2e2-463b-b4c4-20d56c21e535
+Duration:  4.135303s
+Started:   2025-12-27T14:37:09-08:00
+Ended:     2025-12-27T14:37:13-08:00
 
 -------------------------------------------------------------
   SUMMARY
 -------------------------------------------------------------
 
 Builds:    5 total, 5 passed, 0 failed
-Tests:     3 total, 2 passed, 0 failed, 1 skipped
+Tests:     4 total, 3 passed, 0 failed, 1 skipped
 E2E Tests: 0 total, 0 passed, 0 failed, 0 skipped
 
 -------------------------------------------------------------
   BUILDS
 -------------------------------------------------------------
 
-  [PASS] ci (1907ms)
-  [PASS] ci-lint (541ms)
-  [PASS] culprit-finder (1898ms)
-  [PASS] runner-example (693ms)
-  [PASS] server (2085ms)
+  [PASS] ci (2352ms)
+  [PASS] ci-lint (758ms)
+  [PASS] culprit-finder (2358ms)
+  [PASS] runner-example (915ms)
+  [PASS] server (2468ms)
 
 -------------------------------------------------------------
   UNIT TESTS
 -------------------------------------------------------------
 
   [PASS] github.com/example/turboci-lite/cmd/ci/runners/materialize
-         4 passed, 0 failed, 0 skipped (535ms)
+         4 passed, 0 failed, 0 skipped (515ms)
   [PASS] github.com/example/turboci-lite/cmd/ci/testing
-         9 passed, 0 failed, 0 skipped (1455ms)
+         9 passed, 0 failed, 0 skipped (1488ms)
   [PASS] github.com/example/turboci-lite/internal/service
-         0 passed, 0 failed, 0 skipped (296ms)
+         0 passed, 0 failed, 0 skipped (362ms)
+  [PASS] github.com/example/turboci-lite/pkg/ci/dataflow
+         14 passed, 0 failed, 0 skipped (686ms)
 
 =============================================================
