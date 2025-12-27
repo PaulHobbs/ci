@@ -1,3 +1,7 @@
 .claude
 *.db*
 bin/*
+
+# Generated scripts from claude_container.sh
+merge_*.sh
+discard_*.sh

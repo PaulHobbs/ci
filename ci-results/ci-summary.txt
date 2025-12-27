@@ -1,18 +1,39 @@
 =============================================================
-  CI REPORT - EMPTY
+  CI REPORT - PASSED
 =============================================================
 
-Work Plan: 88534be4-3274-4367-93b6-16a04807c931
-Duration:  32.805ms
-Started:   2025-12-27T09:01:58-08:00
-Ended:     2025-12-27T09:01:58-08:00
+Work Plan: 88031037-6794-4fea-a97a-877c983592af
+Duration:  4.052578s
+Started:   2025-12-27T09:49:16-08:00
+Ended:     2025-12-27T09:49:20-08:00
 
 -------------------------------------------------------------
   SUMMARY
 -------------------------------------------------------------
 
-Builds:    0 total, 0 passed, 0 failed
-Tests:     0 total, 0 passed, 0 failed, 0 skipped
+Builds:    5 total, 5 passed, 0 failed
+Tests:     3 total, 2 passed, 0 failed, 1 skipped
 E2E Tests: 0 total, 0 passed, 0 failed, 0 skipped
+
+-------------------------------------------------------------
+  BUILDS
+-------------------------------------------------------------
+
+  [PASS] ci (1907ms)
+  [PASS] ci-lint (541ms)
+  [PASS] culprit-finder (1898ms)
+  [PASS] runner-example (693ms)
+  [PASS] server (2085ms)
+
+-------------------------------------------------------------
+  UNIT TESTS
+-------------------------------------------------------------
+
+  [PASS] github.com/example/turboci-lite/cmd/ci/runners/materialize
+         4 passed, 0 failed, 0 skipped (535ms)
+  [PASS] github.com/example/turboci-lite/cmd/ci/testing
+         9 passed, 0 failed, 0 skipped (1455ms)
+  [PASS] github.com/example/turboci-lite/internal/service
+         0 passed, 0 failed, 0 skipped (296ms)
 
 =============================================================

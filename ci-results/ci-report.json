@@ -1,24 +1,85 @@
 {
-  "work_plan_id": "88534be4-3274-4367-93b6-16a04807c931",
-  "start_time": "2025-12-27T09:01:58-08:00",
-  "end_time": "2025-12-27T09:01:58.032805-08:00",
-  "duration": "32.805ms",
-  "status": "empty",
+  "work_plan_id": "88031037-6794-4fea-a97a-877c983592af",
+  "start_time": "2025-12-27T09:49:16-08:00",
+  "end_time": "2025-12-27T09:49:20.052578-08:00",
+  "duration": "4.052578s",
+  "status": "passed",
   "summary": {
-    "total_builds": 0,
-    "passed_builds": 0,
+    "total_builds": 5,
+    "passed_builds": 5,
     "failed_builds": 0,
-    "total_tests": 0,
-    "passed_tests": 0,
+    "total_tests": 3,
+    "passed_tests": 2,
     "failed_tests": 0,
-    "skipped_tests": 0,
+    "skipped_tests": 1,
     "total_e2e": 0,
     "passed_e2e": 0,
     "failed_e2e": 0,
     "skipped_e2e": 0
   },
-  "build_results": null,
-  "test_results": null,
+  "build_results": [
+    {
+      "check_id": "build:ci",
+      "binary": "./cmd/ci",
+      "output": "ci",
+      "success": true,
+      "duration_ms": 1907
+    },
+    {
+      "check_id": "build:ci-lint",
+      "binary": "./cmd/ci-lint",
+      "output": "ci-lint",
+      "success": true,
+      "duration_ms": 541
+    },
+    {
+      "check_id": "build:culprit-finder",
+      "binary": "./cmd/culprit-finder",
+      "output": "culprit-finder",
+      "success": true,
+      "duration_ms": 1898
+    },
+    {
+      "check_id": "build:runner-example",
+      "binary": "./cmd/runner-example",
+      "output": "runner-example",
+      "success": true,
+      "duration_ms": 693
+    },
+    {
+      "check_id": "build:server",
+      "binary": "./cmd/server",
+      "output": "server",
+      "success": true,
+      "duration_ms": 2085
+    }
+  ],
+  "test_results": [
+    {
+      "check_id": "test:github.com/example/turboci-lite/cmd/ci/runners/materialize",
+      "package": "github.com/example/turboci-lite/cmd/ci/runners/materialize",
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 535
+    },
+    {
+      "check_id": "test:github.com/example/turboci-lite/cmd/ci/testing",
+      "package": "github.com/example/turboci-lite/cmd/ci/testing",
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 1455
+    },
+    {
+      "check_id": "test:github.com/example/turboci-lite/internal/service",
+      "package": "github.com/example/turboci-lite/internal/service",
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 296
+    }
+  ],
   "e2e_results": null,
   "artifacts": null
 }
