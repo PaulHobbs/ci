@@ -19,9 +19,15 @@ type TimelineNode struct {
 	ID           string         `json:"id"`
 	Type         string         `json:"type"` // "check" or "stage"
 	State        string         `json:"state"`
-	StartTime    *time.Time     `json:"startTime,omitempty"`
-	EndTime      *time.Time     `json:"endTime,omitempty"`
+	StartTime    *time.Time     `json:"startTime,omitempty"`    // When execution actually started (not creation)
+	EndTime      *time.Time     `json:"endTime,omitempty"`      // When execution completed
+	CreatedAt    time.Time      `json:"createdAt"`              // When node was created (for reference)
 	Dependencies []string       `json:"dependencies,omitempty"`
+
+	// Timing instrumentation (in milliseconds)
+	QueueDurationMs     *int64 `json:"queueDurationMs,omitempty"`     // Time from creation to execution start
+	ExecutionDurationMs *int64 `json:"executionDurationMs,omitempty"` // Time from execution start to end
+	TotalDurationMs     *int64 `json:"totalDurationMs,omitempty"`     // Total time from creation to completion
 
 	// Check-specific fields
 	Kind    string         `json:"kind,omitempty"`
@@ -36,12 +42,13 @@ type TimelineNode struct {
 
 // AttemptInfo represents a stage execution attempt
 type AttemptInfo struct {
-	Idx       int            `json:"idx"`
-	State     string         `json:"state"`
-	StartTime time.Time      `json:"startTime"`
-	EndTime   *time.Time     `json:"endTime,omitempty"`
-	Progress  []ProgressInfo `json:"progress,omitempty"`
-	Failure   *FailureInfo   `json:"failure,omitempty"`
+	Idx        int            `json:"idx"`
+	State      string         `json:"state"`
+	StartTime  time.Time      `json:"startTime"`
+	EndTime    *time.Time     `json:"endTime,omitempty"`
+	DurationMs *int64         `json:"durationMs,omitempty"` // Actual execution duration
+	Progress   []ProgressInfo `json:"progress,omitempty"`
+	Failure    *FailureInfo   `json:"failure,omitempty"`
 }
 
 // ProgressInfo represents a progress update
@@ -85,12 +92,37 @@ func convertCheck(check *domain.Check) TimelineNode {
 		Kind:      check.Kind,
 		State:     check.State.String(),
 		Options:   check.Options,
-		StartTime: &check.CreatedAt,
+		CreatedAt: check.CreatedAt,
 	}
+
+	// For checks, StartTime is when it transitioned to WAITING state
+	// (when its fulfilling stage started executing)
+	// We approximate this as when results started arriving, or use CreatedAt as fallback
+	if len(check.Results) > 0 {
+		// Use first result's creation time as start
+		node.StartTime = &check.Results[0].CreatedAt
+	} else if check.State == domain.CheckStateWaiting || check.State == domain.CheckStateFinal {
+		// No results yet but state advanced - use UpdatedAt as approximation
+		node.StartTime = &check.UpdatedAt
+	}
+	// If still PLANNED/PLANNING, leave StartTime nil (not started yet)
 
 	// End time is UpdatedAt if the check is in a final state
 	if check.State == domain.CheckStateFinal {
 		node.EndTime = &check.UpdatedAt
+
+		// Calculate durations
+		if node.StartTime != nil {
+			execMs := check.UpdatedAt.Sub(*node.StartTime).Milliseconds()
+			node.ExecutionDurationMs = &execMs
+		}
+		totalMs := check.UpdatedAt.Sub(check.CreatedAt).Milliseconds()
+		node.TotalDurationMs = &totalMs
+
+		if node.StartTime != nil {
+			queueMs := node.StartTime.Sub(check.CreatedAt).Milliseconds()
+			node.QueueDurationMs = &queueMs
+		}
 	}
 
 	// Convert dependencies
@@ -112,12 +144,30 @@ func convertStage(stage *domain.Stage) TimelineNode {
 		RunnerType:    stage.RunnerType,
 		ExecutionMode: stage.ExecutionMode.String(),
 		Args:          stage.Args,
-		StartTime:     &stage.CreatedAt,
+		CreatedAt:     stage.CreatedAt,
 	}
 
-	// End time is UpdatedAt if the stage is in a final state
+	// StartTime is when execution actually started (first attempt's CreatedAt)
+	// NOT when the stage was created in the database
+	if len(stage.Attempts) > 0 {
+		node.StartTime = &stage.Attempts[0].CreatedAt
+	}
+	// If no attempts yet, leave StartTime nil (hasn't started executing)
+
+	// End time is when the last attempt completed (if in final state)
 	if stage.State == domain.StageStateFinal {
 		node.EndTime = &stage.UpdatedAt
+
+		// Calculate durations
+		if node.StartTime != nil {
+			execMs := stage.UpdatedAt.Sub(*node.StartTime).Milliseconds()
+			node.ExecutionDurationMs = &execMs
+
+			queueMs := node.StartTime.Sub(stage.CreatedAt).Milliseconds()
+			node.QueueDurationMs = &queueMs
+		}
+		totalMs := stage.UpdatedAt.Sub(stage.CreatedAt).Milliseconds()
+		node.TotalDurationMs = &totalMs
 	}
 
 	// Convert attempts
@@ -130,6 +180,10 @@ func convertStage(stage *domain.Stage) TimelineNode {
 
 		if attempt.State.IsFinal() {
 			attemptInfo.EndTime = &attempt.UpdatedAt
+
+			// Add duration to attempt info
+			durationMs := attempt.UpdatedAt.Sub(attempt.CreatedAt).Milliseconds()
+			attemptInfo.DurationMs = &durationMs
 		}
 
 		for _, prog := range attempt.Progress {
