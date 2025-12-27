@@ -23,6 +23,16 @@ echo ""
 echo "Creating worktree with branch: ${BRANCH_NAME}"
 git worktree add -b "${BRANCH_NAME}" "${WORKTREE_DIR}" HEAD
 
+# Fix the .git file in the worktree to point to the container path
+# Worktrees use a .git file that points to the main repo's .git directory
+# We need to update this to work inside the container
+WORKTREE_NAME=$(basename "${WORKTREE_DIR}")
+WORKTREE_GIT_FILE="${WORKTREE_DIR}/.git"
+
+# Update the .git file to point to the mounted git directory in the container
+echo "gitdir: /git-main/.git/worktrees/${WORKTREE_NAME}" > "${WORKTREE_GIT_FILE}"
+echo "Updated worktree .git file for container access"
+
 # Add CLAUDE.md instructions to always commit work
 CLAUDE_MD="${WORKTREE_DIR}/CLAUDE.md"
 COMMIT_INSTRUCTIONS="
@@ -227,6 +237,7 @@ docker run -it --rm \
     --cap-add=NET_ADMIN \
     --cap-add=NET_RAW \
     -v "${WORKTREE_DIR}:/workspace" \
+    -v "${REPO_ROOT}/.git:/git-main/.git:ro" \
     -v "${HOME}/.claude:/home/node/.claude" \
     -w /workspace \
     -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
