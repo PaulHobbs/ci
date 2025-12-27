@@ -1301,3 +1301,156 @@ func TestE2E_DependentStageRunsAfterUpstreamCompletes(t *testing.T) {
 func ptr[T any](v T) *T {
 	return &v
 }
+
+// TestE2E_NoChangesDetected is a regression test that verifies the CI completes
+// successfully when the trigger runner detects no changes.
+// This test catches two bugs that were fixed:
+// 1. Collector check created with PLANNING state instead of PLANNED
+// 2. Collector stage not created when there are no build/test checks
+func TestE2E_NoChangesDetected(t *testing.T) {
+	ctx := context.Background()
+	env := NewCITestEnv(t)
+	defer env.Stop()
+
+	// Register mock runners
+	triggerRunner := env.RegisterMockRunner(ctx, "trigger-1", "trigger_builds", "localhost:50061")
+	materializeRunner := env.RegisterMockRunner(ctx, "materialize-1", "materialize", "localhost:50062")
+	collectorRunner := env.RegisterMockRunner(ctx, "collector-1", "result_collector", "localhost:50066")
+
+	// Trigger runner creates NO checks (simulating no changes detected)
+	triggerRunner.OnRun = func(ctx context.Context, req *service.RunRequest) (*service.RunResponse, error) {
+		// No WriteNodes call - no checks to create
+		return &service.RunResponse{
+			StageState: domain.StageStateFinal,
+			CheckUpdates: []*service.CheckUpdate{{
+				CheckID:  req.CheckOptions[0].CheckID,
+				State:    domain.CheckStateFinal,
+				Data:     map[string]any{"packages_count": 0, "changes_detected": false},
+				Finalize: true,
+			}},
+		}, nil
+	}
+
+	// Materialize runner creates collector check and collector stage (even with no build/test checks)
+	materializeRunner.OnRun = func(ctx context.Context, req *service.RunRequest) (*service.RunResponse, error) {
+		syncMode := domain.ExecutionModeSync
+
+		// REGRESSION FIX 1: Create collector check with PLANNED state (not PLANNING)
+		_, err := env.Orchestrator.WriteNodes(ctx, &service.WriteNodesRequest{
+			WorkPlanID: req.WorkPlanID,
+			Checks: []*service.CheckWrite{
+				{ID: "collector:results", State: ptr(domain.CheckStatePlanned), Kind: "collector"},
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		// REGRESSION FIX 2: Always create collector stage, even when no build/test stages
+		_, err = env.Orchestrator.WriteNodes(ctx, &service.WriteNodesRequest{
+			WorkPlanID: req.WorkPlanID,
+			Stages: []*service.StageWrite{
+				{
+					ID:            "stage:collector",
+					ExecutionMode: &syncMode,
+					RunnerType:    "result_collector",
+					Assignments:   []domain.Assignment{{TargetCheckID: "collector:results", GoalState: domain.CheckStateFinal}},
+					// No dependencies when there are no build/test stages
+				},
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		return &service.RunResponse{
+			StageState: domain.StageStateFinal,
+			CheckUpdates: []*service.CheckUpdate{{
+				CheckID:  req.CheckOptions[0].CheckID,
+				State:    domain.CheckStateFinal,
+				Data:     map[string]any{"stages_created": 1},
+				Finalize: true,
+			}},
+		}, nil
+	}
+
+	// Collector runner uses default behavior (succeed)
+
+	env.Start()
+
+	// Create work plan
+	wp, err := env.Orchestrator.CreateWorkPlan(ctx, nil)
+	if err != nil {
+		t.Fatalf("failed to create work plan: %v", err)
+	}
+
+	// Create initial trigger and materialize stages
+	syncMode := domain.ExecutionModeSync
+	_, err = env.Orchestrator.WriteNodes(ctx, &service.WriteNodesRequest{
+		WorkPlanID: wp.ID,
+		Checks: []*service.CheckWrite{
+			{ID: "trigger:check", State: ptr(domain.CheckStatePlanned), Kind: "trigger"},
+			{ID: "materialize:check", State: ptr(domain.CheckStatePlanned), Kind: "materialize"},
+		},
+		Stages: []*service.StageWrite{
+			{
+				ID:            "trigger-stage",
+				ExecutionMode: &syncMode,
+				RunnerType:    "trigger_builds",
+				Assignments:   []domain.Assignment{{TargetCheckID: "trigger:check", GoalState: domain.CheckStateFinal}},
+			},
+			{
+				ID:            "materialize-stage",
+				ExecutionMode: &syncMode,
+				RunnerType:    "materialize",
+				Assignments:   []domain.Assignment{{TargetCheckID: "materialize:check", GoalState: domain.CheckStateFinal}},
+				Dependencies: &domain.DependencyGroup{
+					Predicate: domain.PredicateAND,
+					Dependencies: []domain.DependencyRef{{
+						TargetType: domain.NodeTypeStage,
+						TargetID:   "trigger-stage",
+					}},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to write initial nodes: %v", err)
+	}
+
+	// Wait for collector check to complete - this should NOT hang forever
+	if !env.WaitForCheckState(ctx, wp.ID, "collector:results", domain.CheckStateFinal, 10*time.Second) {
+		t.Fatal("REGRESSION: collector check did not reach FINAL state - CI hung with no changes detected")
+	}
+
+	// Verify all stages ran
+	if triggerRunner.GetRunCount() != 1 {
+		t.Errorf("expected trigger runner to run 1 time, got %d", triggerRunner.GetRunCount())
+	}
+	if materializeRunner.GetRunCount() != 1 {
+		t.Errorf("expected materialize runner to run 1 time, got %d", materializeRunner.GetRunCount())
+	}
+	if collectorRunner.GetRunCount() != 1 {
+		t.Errorf("expected collector runner to run 1 time, got %d", collectorRunner.GetRunCount())
+	}
+
+	// Verify all checks are finalized
+	for _, checkID := range []string{"trigger:check", "materialize:check", "collector:results"} {
+		resp, err := env.Orchestrator.QueryNodes(ctx, &service.QueryNodesRequest{
+			WorkPlanID:    wp.ID,
+			CheckIDs:      []string{checkID},
+			IncludeChecks: true,
+		})
+		if err != nil {
+			t.Errorf("failed to query check %s: %v", checkID, err)
+			continue
+		}
+		if len(resp.Checks) == 0 {
+			t.Errorf("check %s not found", checkID)
+			continue
+		}
+		if resp.Checks[0].State != domain.CheckStateFinal {
+			t.Errorf("check %s: expected FINAL, got %s", checkID, resp.Checks[0].State)
+		}
+	}
+}
