@@ -114,7 +114,8 @@ func (s *OrchestratorService) advanceNewlyWrittenNodes(ctx context.Context, uow 
 		}
 
 		// Advance if no dependencies
-		if stage.Dependencies == nil || len(stage.Dependencies.Dependencies) == 0 {
+		hasDeps := stage.Dependencies != nil && len(stage.Dependencies.Dependencies) > 0
+		if !hasDeps {
 			if err := s.advanceStageToAttempting(ctx, uow, stage); err != nil {
 				return err
 			}

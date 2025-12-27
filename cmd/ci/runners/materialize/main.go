@@ -76,11 +76,12 @@ func (m *MaterializeRunner) HandleRun(ctx context.Context, req *pb.RunRequest) (
 	log.Printf("[materialize] Found %d checks to materialize", len(queryResp.Checks))
 
 	// First, create the collector check (will be fulfilled by collector stage)
+	// Note: Must use PLANNED state so dependency resolution can advance it to WAITING
 	_, err = m.Orchestrator.WriteNodes(ctx, &pb.WriteNodesRequest{
 		WorkPlanId: req.WorkPlanId,
 		Checks: []*pb.CheckWrite{{
 			Id:    "collector:results",
-			State: pb.CheckState_CHECK_STATE_PLANNING,
+			State: pb.CheckState_CHECK_STATE_PLANNED,
 			Kind:  "collector",
 		}},
 	})
@@ -88,15 +89,10 @@ func (m *MaterializeRunner) HandleRun(ctx context.Context, req *pb.RunRequest) (
 		return m.createFailureResponse(req, fmt.Sprintf("failed to create collector check: %v", err))
 	}
 
-	// Create stages for each check
+	// Create stages for each check (always includes collector stage)
 	stages, err := m.createStages(queryResp.Checks)
 	if err != nil {
 		return m.createFailureResponse(req, fmt.Sprintf("failed to create stages: %v", err))
-	}
-
-	if len(stages) == 0 {
-		log.Printf("[materialize] No stages to create")
-		return m.createSuccessResponse(req, 0)
 	}
 
 	log.Printf("[materialize] Creating %d stages", len(stages))
@@ -139,11 +135,9 @@ func (m *MaterializeRunner) createStages(checks []*pb.Check) ([]*pb.StageWrite, 
 		}
 	}
 
-	// Create collector stage that depends on all other stages
-	if len(allStageIDs) > 0 {
-		collectorStage := m.createCollectorStage(allStageIDs)
-		stages = append(stages, collectorStage)
-	}
+	// Always create collector stage (even with no build/test stages, it reports results)
+	collectorStage := m.createCollectorStage(allStageIDs)
+	stages = append(stages, collectorStage)
 
 	return stages, nil
 }
