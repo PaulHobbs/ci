@@ -73,6 +73,10 @@ echo "=== Merging ${BRANCH_NAME} into ${MAIN_BRANCH} ==="
 # Ensure we're in the main repo
 cd "$(git rev-parse --show-toplevel)"
 
+# Fix the .git file to point back to the host path (container changed it)
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+echo "gitdir: ${REPO_ROOT}/.git/worktrees/$(basename "${WORKTREE_DIR}")" > "${WORKTREE_DIR}/.git"
+
 # Check for uncommitted changes in the worktree
 if git -C "${WORKTREE_DIR}" status --porcelain | grep -q .; then
     echo "ERROR: Worktree has uncommitted changes!"
@@ -162,6 +166,12 @@ echo ""
 
 # Ensure we're in the main repo
 cd "$(git rev-parse --show-toplevel)"
+
+# Fix the .git file to point back to the host path (container changed it)
+if [[ -f "${WORKTREE_DIR}/.git" ]]; then
+    REPO_ROOT="$(git rev-parse --show-toplevel)"
+    echo "gitdir: ${REPO_ROOT}/.git/worktrees/$(basename "${WORKTREE_DIR}")" > "${WORKTREE_DIR}/.git"
+fi
 
 # Remove worktree
 if [[ -d "${WORKTREE_DIR}" ]]; then
